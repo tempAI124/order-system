@@ -31,19 +31,23 @@ import Link from "next/link"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 
+interface AddOn {
+  name: string
+  price: number
+}
+
 interface MenuItem {
   id: string
   name: string
   price: number
   category: "drink" | "food"
-  addOns: string[]
-  customField: string
+  addOns: AddOn[]
 }
 
 interface OrderItem {
   menuItem: MenuItem
   quantity: number
-  addOns: string[]
+  addOns: AddOn[]
   customText: string
   subtotal: number
 }
@@ -176,14 +180,71 @@ export default function HistoryPage() {
   )
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+    try {
+      // Handle different timestamp formats
+      let date: Date
+
+      if (timestamp.includes("/")) {
+        // Format: "30/04/2025, 21:30:36" or similar
+        const parts = timestamp.split(", ")
+        if (parts.length === 2) {
+          const [datePart, timePart] = parts
+          const [day, month, year] = datePart.split("/")
+          date = new Date(`${year}-${month}-${day}T${timePart}`)
+        } else {
+          date = new Date(timestamp)
+        }
+      } else {
+        date = new Date(timestamp)
+      }
+
+      if (isNaN(date.getTime())) {
+        return timestamp // Return original if parsing fails
+      }
+
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch (error) {
+      return timestamp // Return original if any error occurs
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        return dateString // Return original if invalid
+      }
+      return date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    } catch (error) {
+      return dateString
+    }
   }
 
   const getTotalItems = (order: Order) => {
     return order.items.reduce((sum, item) => sum + item.quantity, 0)
+  }
+
+  const getAddOnNames = (addOns: any[]): string => {
+    if (!Array.isArray(addOns)) return ""
+
+    return addOns
+      .map((addon) => {
+        if (typeof addon === "string") {
+          return addon
+        } else if (typeof addon === "object" && addon.name) {
+          return `${addon.name} (+$${addon.price?.toFixed(2) || "0.00"})`
+        }
+        return String(addon)
+      })
+      .join(", ")
   }
 
   return (
@@ -206,7 +267,7 @@ export default function HistoryPage() {
           <div className="flex gap-4">
             <Badge variant="secondary" className="text-sm">
               <Calendar className="h-4 w-4 mr-1" />
-              {new Date().toLocaleDateString()}
+              {formatDate(new Date().toDateString())}
             </Badge>
             <Badge variant="secondary" className="text-sm">
               <Receipt className="h-4 w-4 mr-1" />
@@ -404,14 +465,14 @@ export default function HistoryPage() {
                             <DialogHeader>
                               <DialogTitle>Receipt Details</DialogTitle>
                               <DialogDescription>
-                                Order #{order.id.slice(-6)} - {order.timestamp}
+                                Order #{order.id.slice(-6)} - {formatTime(order.timestamp)}
                               </DialogDescription>
                             </DialogHeader>
 
                             <div className="py-4">
                               <div className="text-center mb-4">
-                                <h3 className="font-bold text-lg">Cafe Receipt</h3>
-                                <p className="text-sm text-gray-600">{order.timestamp}</p>
+                                <h3 className="font-bold text-lg">DDAL.licious Receipt</h3>
+                                <p className="text-sm text-gray-600">{formatTime(order.timestamp)}</p>
                                 <p className="text-xs text-gray-500">Order ID: {order.id}</p>
                               </div>
 
@@ -427,9 +488,9 @@ export default function HistoryPage() {
                                     <div className="text-xs text-gray-600 ml-4">
                                       ${item.menuItem.price.toFixed(2)} each
                                     </div>
-                                    {item.addOns.length > 0 && (
+                                    {item.addOns && item.addOns.length > 0 && (
                                       <div className="text-xs text-gray-600 ml-4">
-                                        Add-ons: {item.addOns.join(", ")}
+                                        Add-ons: {getAddOnNames(item.addOns)}
                                       </div>
                                     )}
                                     {item.customText && (
@@ -445,7 +506,7 @@ export default function HistoryPage() {
                                   <span>${order.total.toFixed(2)}</span>
                                 </div>
                                 <div className="text-center mt-4 text-xs text-gray-500">
-                                  Thank you for your business!
+                                  Thank you for choosing DDAL.licious!
                                 </div>
                               </div>
                             </div>
@@ -469,7 +530,7 @@ export default function HistoryPage() {
                                 <strong>Order Details:</strong>
                                 <br />• {getTotalItems(order)} items
                                 <br />• Total: ${order.total.toFixed(2)}
-                                <br />• Time: {order.timestamp}
+                                <br />• Time: {formatTime(order.timestamp)}
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

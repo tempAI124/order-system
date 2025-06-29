@@ -1,0 +1,662 @@
+"use client"
+
+import type React from "react"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { ArrowLeft, Archive, Search, Receipt, ChevronDown, ChevronRight, Calendar, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { Label } from "@/components/ui/label"
+
+interface MenuItem {
+  id: string
+  name: string
+  price: number
+  category: "drink" | "food"
+  addOns: string[]
+  customField: string
+}
+
+interface OrderItem {
+  menuItem: MenuItem
+  quantity: number
+  addOns: string[]
+  customText: string
+  subtotal: number
+}
+
+interface Order {
+  id: string
+  items: OrderItem[]
+  total: number
+  timestamp: string
+  date: string
+}
+
+interface SaleSession {
+  id: string
+  name?: string
+  date: string
+  closedAt: string
+  lastUpdated?: string
+  orders: Order[]
+  totalSales: number
+  totalItems: number
+  orderCount: number
+}
+
+export default function ArchivePage() {
+  const [salesSessions, setSalesSessions] = useState<SaleSession[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [sortBy, setSortBy] = useState<"date" | "sales">("date")
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [importData, setImportData] = useState("")
+  const [importPreview, setImportPreview] = useState<SaleSession[]>([])
+
+  useEffect(() => {
+    loadSalesSessions()
+  }, [sortBy])
+
+  const loadSalesSessions = () => {
+    const savedArchive = localStorage.getItem("cafe-archive")
+    if (savedArchive) {
+      const sessions: SaleSession[] = JSON.parse(savedArchive)
+
+      // Sort sessions
+      sessions.sort((a, b) => {
+        if (sortBy === "date") {
+          return new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime()
+        } else {
+          return b.totalSales - a.totalSales
+        }
+      })
+
+      setSalesSessions(sessions)
+    }
+  }
+
+  const deleteSaleSession = (sessionId: string) => {
+    const updatedSessions = salesSessions.filter((session) => session.id !== sessionId)
+    localStorage.setItem("cafe-archive", JSON.stringify(updatedSessions))
+    setSalesSessions(updatedSessions)
+
+    // Close expanded session if it was deleted
+    const newExpanded = new Set(expandedSessions)
+    newExpanded.delete(sessionId)
+    setExpandedSessions(newExpanded)
+  }
+
+  const deleteOrderFromSession = (sessionId: string, orderId: string) => {
+    const updatedSessions = salesSessions.map((session) => {
+      if (session.id === sessionId) {
+        const orderToDelete = session.orders.find((order) => order.id === orderId)
+        if (orderToDelete) {
+          const updatedOrders = session.orders.filter((order) => order.id !== orderId)
+          const orderTotal = orderToDelete.total
+          const orderItems = orderToDelete.items.reduce((sum, item) => sum + item.quantity, 0)
+
+          return {
+            ...session,
+            orders: updatedOrders,
+            orderCount: session.orderCount - 1,
+            totalSales: session.totalSales - orderTotal,
+            totalItems: session.totalItems - orderItems,
+            lastUpdated: new Date().toLocaleString(),
+          }
+        }
+      }
+      return session
+    })
+
+    localStorage.setItem("cafe-archive", JSON.stringify(updatedSessions))
+    setSalesSessions(updatedSessions)
+  }
+
+  const handleImportData = () => {
+    try {
+      const parsedData = JSON.parse(importData)
+      const convertedSessions: SaleSession[] = []
+
+      Object.entries(parsedData).forEach(([dateKey, orders]: [string, any[]]) => {
+        const sessionDate = new Date(dateKey).toDateString()
+
+        const convertedOrders: Order[] = orders.map((order: any) => {
+          const orderItems: OrderItem[] = []
+          let orderTotal = 0
+
+          Object.entries(order.details).forEach(([itemName, itemData]: [string, any]) => {
+            const menuItem: MenuItem = {
+              id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+              name: itemName.trim(),
+              price: itemData.price || 0,
+              category: "food", // Default category
+              addOns: [],
+              customField: "",
+            }
+
+            const orderItem: OrderItem = {
+              menuItem,
+              quantity: itemData.quantity || 1,
+              addOns: [],
+              customText: "",
+              subtotal: (itemData.price || 0) * (itemData.quantity || 1),
+            }
+
+            orderItems.push(orderItem)
+            orderTotal += orderItem.subtotal
+          })
+
+          return {
+            id: order.id?.toString() || Date.now().toString(),
+            items: orderItems,
+            total: orderTotal,
+            timestamp: order.timestamp || new Date().toLocaleString(),
+            date: sessionDate,
+          }
+        })
+
+        const totalSales = convertedOrders.reduce((sum, order) => sum + order.total, 0)
+        const totalItems = convertedOrders.reduce(
+          (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+          0,
+        )
+
+        const session: SaleSession = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          name: `Imported Session - ${new Date(dateKey).toLocaleDateString()}`,
+          date: sessionDate,
+          closedAt: new Date().toLocaleString(),
+          orders: convertedOrders,
+          totalSales,
+          totalItems,
+          orderCount: convertedOrders.length,
+        }
+
+        convertedSessions.push(session)
+      })
+
+      setImportPreview(convertedSessions)
+    } catch (error) {
+      alert("Invalid JSON format. Please check your data and try again.")
+    }
+  }
+
+  const confirmImport = () => {
+    if (importPreview.length === 0) return
+
+    const existingArchive = JSON.parse(localStorage.getItem("cafe-archive") || "[]")
+    const updatedArchive = [...existingArchive, ...importPreview]
+    localStorage.setItem("cafe-archive", JSON.stringify(updatedArchive))
+
+    // Refresh the display
+    loadSalesSessions()
+
+    // Reset import state
+    setShowImportDialog(false)
+    setImportData("")
+    setImportPreview([])
+
+    alert(`Successfully imported ${importPreview.length} sale session(s)!`)
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.type !== "application/json" && !file.name.endsWith(".json")) {
+      alert("Please select a valid JSON file.")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result as string
+      setImportData(content)
+    }
+    reader.onerror = () => {
+      alert("Error reading file. Please try again.")
+    }
+    reader.readAsText(file)
+  }
+
+  const filteredSessions = salesSessions.filter(
+    (session) =>
+      session.date.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (session.name && session.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      session.orders.some(
+        (order) =>
+          order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          order.items.some((item) => item.menuItem.name.toLowerCase().includes(searchTerm.toLowerCase())),
+      ),
+  )
+
+  const toggleSessionExpansion = (sessionId: string) => {
+    const newExpanded = new Set(expandedSessions)
+    if (newExpanded.has(sessionId)) {
+      newExpanded.delete(sessionId)
+    } else {
+      newExpanded.add(sessionId)
+    }
+    setExpandedSessions(newExpanded)
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  }
+
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const getTotalItems = (order: Order) => {
+    return order.items.reduce((sum, item) => sum + item.quantity, 0)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto p-6">
+        <div className="flex items-center gap-4 mb-8">
+          <Link href="/">
+            <Button variant="outline" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Archive</h1>
+            <p className="text-gray-600">View archived sale sessions</p>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div className="flex gap-4">
+            <Badge variant="secondary" className="text-sm">
+              <Archive className="h-4 w-4 mr-1" />
+              {salesSessions.length} Sessions
+            </Badge>
+            <Badge variant="secondary" className="text-sm">
+              <Receipt className="h-4 w-4 mr-1" />
+              {salesSessions.reduce((sum, session) => sum + session.orderCount, 0)} Orders
+            </Badge>
+            <Badge variant="secondary" className="text-sm">
+              Total: ${salesSessions.reduce((sum, session) => sum + session.totalSales, 0).toFixed(2)}
+            </Badge>
+          </div>
+
+          <div className="flex gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search archive..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 w-full sm:w-[200px]"
+              />
+            </div>
+
+            <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Archive className="h-4 w-4 mr-2" />
+                  Import
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                  <DialogTitle>Import Archive Data</DialogTitle>
+                  <DialogDescription>Upload a JSON file to import it into the archive system.</DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="import-file">JSON File</Label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                      <input
+                        id="import-file"
+                        type="file"
+                        accept=".json"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <label htmlFor="import-file" className="cursor-pointer flex flex-col items-center gap-2">
+                        <Archive className="h-8 w-8 text-gray-400" />
+                        <span className="text-sm font-medium">Click to upload JSON file</span>
+                        <span className="text-xs text-gray-500">or drag and drop</span>
+                      </label>
+                    </div>
+                    {importData && (
+                      <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                        <strong>File loaded:</strong> {Math.round(importData.length / 1024)}KB
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleImportData} variant="outline" disabled={!importData.trim()}>
+                      Preview Import
+                    </Button>
+                    {importPreview.length > 0 && (
+                      <Button onClick={confirmImport} className="bg-green-600 hover:bg-green-700">
+                        Confirm Import ({importPreview.length} sessions)
+                      </Button>
+                    )}
+                  </div>
+
+                  {importPreview.length > 0 && (
+                    <div className="space-y-3 max-h-60 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                      <h4 className="font-medium text-sm">Import Preview:</h4>
+                      {importPreview.map((session, index) => (
+                        <div key={index} className="p-2 bg-white rounded border text-sm">
+                          <div className="font-medium">{session.name}</div>
+                          <div className="text-gray-600 text-xs">
+                            {session.orderCount} orders • {session.totalItems} items • ${session.totalSales.toFixed(2)}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Orders:{" "}
+                            {session.orders
+                              .map((order) =>
+                                order.items.map((item) => `${item.quantity}x ${item.menuItem.name}`).join(", "),
+                              )
+                              .join(" | ")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-blue-50 rounded-lg text-sm">
+                    <p className="font-medium text-blue-800 mb-1">Expected JSON Format:</p>
+                    <code className="text-xs text-blue-700 block">
+                      {`{"Date String": [{"id": number, "details": {"Item Name": {"price": number, "quantity": number}}, "timestamp": "string"}]}`}
+                    </code>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowImportDialog(false)
+                      setImportData("")
+                      setImportPreview([])
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Select value={sortBy} onValueChange={(value: "date" | "sales") => setSortBy(value)}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">By Date</SelectItem>
+                <SelectItem value="sales">By Sales</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Archive List */}
+        {filteredSessions.length === 0 ? (
+          <div className="text-center py-12">
+            <Archive className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {salesSessions.length === 0 ? "No archived sessions" : "No results found"}
+            </h3>
+            <p className="text-gray-600">
+              {salesSessions.length === 0
+                ? "Closed sale sessions will appear here."
+                : "Try adjusting your search terms."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredSessions.map((session) => (
+              <Card key={session.id}>
+                <CardHeader
+                  className="cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => toggleSessionExpansion(session.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {expandedSessions.has(session.id) ? (
+                        <ChevronDown className="h-5 w-5 text-gray-500" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-gray-500" />
+                      )}
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          {session.name || `Sale Session - ${formatDate(session.date)}`}
+                        </CardTitle>
+                        <CardDescription>
+                          Closed at {formatTime(session.closedAt)}
+                          {session.lastUpdated && session.lastUpdated !== session.closedAt && (
+                            <span> • Last updated: {formatTime(session.lastUpdated)}</span>
+                          )}
+                          <br />
+                          {session.orderCount} orders • {session.totalItems} items sold
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-600">${session.totalSales.toFixed(2)}</div>
+                        <div className="text-sm text-gray-500">
+                          ${(session.totalSales / session.orderCount).toFixed(2)} avg
+                        </div>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="icon" onClick={(e) => e.stopPropagation()}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Sale Session</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete "
+                              {session.name || `Sale Session - ${formatDate(session.date)}`}"? This will permanently
+                              remove the entire session and all its orders. This action cannot be undone.
+                              <br />
+                              <br />
+                              <strong>Session Details:</strong>
+                              <br />• {session.orderCount} orders
+                              <br />• {session.totalItems} items sold
+                              <br />• Total sales: ${session.totalSales.toFixed(2)}
+                              <br />• Date: {formatDate(session.date)}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteSaleSession(session.id)}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              Delete Session
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                {expandedSessions.has(session.id) && (
+                  <CardContent className="pt-0">
+                    <div className="space-y-3">
+                      {session.orders.map((order) => (
+                        <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium">Order #{order.id.slice(-6)}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {formatTime(order.timestamp)}
+                              </Badge>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {order.items.slice(0, 3).map((item, index) => (
+                                <Badge key={index} variant="secondary" className="text-xs">
+                                  {item.quantity}x {item.menuItem.name}
+                                </Badge>
+                              ))}
+                              {order.items.length > 3 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  +{order.items.length - 3} more
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="text-xs text-gray-600">{getTotalItems(order)} items total</div>
+                          </div>
+
+                          <div className="flex items-center gap-3 ml-4">
+                            <div className="text-right">
+                              <div className="font-bold">${order.total.toFixed(2)}</div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm" onClick={() => setSelectedOrder(order)}>
+                                    View
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[425px]">
+                                  <DialogHeader>
+                                    <DialogTitle>Receipt Details</DialogTitle>
+                                    <DialogDescription>
+                                      Order #{order.id.slice(-6)} - {order.timestamp}
+                                    </DialogDescription>
+                                  </DialogHeader>
+
+                                  <div className="py-4">
+                                    <div className="text-center mb-4">
+                                      <h3 className="font-bold text-lg">Cafe Receipt</h3>
+                                      <p className="text-sm text-gray-600">{order.timestamp}</p>
+                                      <p className="text-xs text-gray-500">Order ID: {order.id}</p>
+                                    </div>
+
+                                    <div className="border-t border-b py-4 space-y-3">
+                                      {order.items.map((item, index) => (
+                                        <div key={index} className="space-y-1">
+                                          <div className="flex justify-between">
+                                            <span className="font-medium">
+                                              {item.quantity}x {item.menuItem.name}
+                                            </span>
+                                            <span>${item.subtotal.toFixed(2)}</span>
+                                          </div>
+                                          <div className="text-xs text-gray-600 ml-4">
+                                            ${item.menuItem.price.toFixed(2)} each
+                                          </div>
+                                          {item.addOns.length > 0 && (
+                                            <div className="text-xs text-gray-600 ml-4">
+                                              Add-ons: {item.addOns.join(", ")}
+                                            </div>
+                                          )}
+                                          {item.customText && (
+                                            <div className="text-xs text-gray-600 ml-4">Note: {item.customText}</div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    <div className="pt-4">
+                                      <div className="flex justify-between items-center text-lg font-bold">
+                                        <span>Total:</span>
+                                        <span>${order.total.toFixed(2)}</span>
+                                      </div>
+                                      <div className="text-center mt-4 text-xs text-gray-500">
+                                        Thank you for your business!
+                                      </div>
+                                    </div>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Order from Session</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete Order #{order.id.slice(-6)} from this session?
+                                      This will permanently remove the order and update the session totals. This action
+                                      cannot be undone.
+                                      <br />
+                                      <br />
+                                      <strong>Order Details:</strong>
+                                      <br />• {getTotalItems(order)} items
+                                      <br />• Total: ${order.total.toFixed(2)}
+                                      <br />• Time: {order.timestamp}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deleteOrderFromSession(session.id, order.id)}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Delete Order
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

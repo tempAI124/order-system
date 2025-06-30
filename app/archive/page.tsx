@@ -35,6 +35,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 interface AddOn {
   name: string
   price: number
+  allowQuantity?: boolean
 }
 
 interface MenuItem {
@@ -86,6 +87,116 @@ export default function ArchivePage() {
   useEffect(() => {
     loadSalesSessions()
   }, [sortBy])
+
+  // Enhanced smart categorization function
+  const categorizeItem = (itemName: string): "drink" | "food" => {
+    const name = itemName.toLowerCase().trim()
+
+    // Drink keywords and patterns
+    const drinkKeywords = [
+      "iced",
+      "latte",
+      "coffee",
+      "americano",
+      "macchiato",
+      "mocha",
+      "chocolate",
+      "strawberry",
+      "caramel",
+      "vanilla",
+      "spanish",
+    ]
+
+    // Food keywords and patterns
+    const foodKeywords = [
+      "cookie",
+      "cookies",
+      "cake",
+      "wrap",
+      "cheese",
+      "indomie",
+      "maggi",
+      "moist",
+      "chip",
+      "assorted",
+      "big cookie",
+      "loaded",
+      "chicken",
+    ]
+
+    // Drink add-ons (milk alternatives, syrups, coffee enhancers)
+    const drinkAddonKeywords = [
+      "oatmilk",
+      "oat milk",
+      "almond milk",
+      "soy milk",
+      "coconut milk",
+      "milk",
+      "syrup",
+      "vanilla syrup",
+      "caramel syrup",
+      "hazelnut syrup",
+      "extra shot",
+      "shot",
+      "espresso shot",
+      "decaf",
+      "sugar",
+      "sweetener",
+      "stevia",
+      "honey",
+    ]
+
+    // Food add-ons (eggs, proteins, solid ingredients)
+    const foodAddonKeywords = [
+      "telur",
+      "egg",
+      "eggs",
+      "cheese",
+      "bacon",
+      "ham",
+      "chicken",
+      "beef",
+      "mushroom",
+      "tomato",
+      "lettuce",
+      "onion",
+      "avocado",
+      "mayo",
+      "sauce",
+      "butter",
+      "cream cheese",
+      "extra cheese",
+      "protein",
+    ]
+
+    // Check for drink add-ons first
+    if (drinkAddonKeywords.some((keyword) => name.includes(keyword))) {
+      return "drink"
+    }
+
+    // Check for food add-ons
+    if (foodAddonKeywords.some((keyword) => name.includes(keyword))) {
+      return "food"
+    }
+
+    // Check for main drink items
+    if (drinkKeywords.some((keyword) => name.includes(keyword))) {
+      return "drink"
+    }
+
+    // Check for main food items
+    if (foodKeywords.some((keyword) => name.includes(keyword))) {
+      return "food"
+    }
+
+    // Special cases for common patterns
+    if (name.includes("iced") || name.includes("latte") || name.includes("coffee")) {
+      return "drink"
+    }
+
+    // Default to food for unknown items (safer assumption for add-ons)
+    return "food"
+  }
 
   const loadSalesSessions = () => {
     const savedArchive = localStorage.getItem("cafe-archive")
@@ -155,11 +266,14 @@ export default function ArchivePage() {
           let orderTotal = 0
 
           Object.entries(order.details).forEach(([itemName, itemData]: [string, any]) => {
+            const cleanItemName = itemName.trim()
+            const itemCategory = categorizeItem(cleanItemName)
+
             const menuItem: MenuItem = {
               id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-              name: itemName.trim(),
+              name: cleanItemName,
               price: itemData.price || 0,
-              category: "food", // Default category
+              category: itemCategory,
               addOns: [],
             }
 
@@ -225,7 +339,7 @@ export default function ArchivePage() {
     setImportData("")
     setImportPreview([])
 
-    alert(`Successfully imported ${importPreview.length} sale session(s)!`)
+    alert(`Successfully imported ${importPreview.length} sale session(s) with smart categorization!`)
   }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -337,6 +451,16 @@ export default function ArchivePage() {
       .join(", ")
   }
 
+  const getCategoryBadgeColor = (category: "drink" | "food") => {
+    return category === "drink"
+      ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+      : "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
+  }
+
+  const getCategoryIcon = (category: "drink" | "food") => {
+    return category === "drink" ? "🥤" : "🍪"
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
@@ -349,7 +473,7 @@ export default function ArchivePage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-foreground">Archive</h1>
-              <p className="text-muted-foreground">View archived sale sessions</p>
+              <p className="text-muted-foreground">View archived sale sessions with smart categorization</p>
             </div>
           </div>
           <ThemeToggle />
@@ -391,8 +515,11 @@ export default function ArchivePage() {
               </DialogTrigger>
               <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
-                  <DialogTitle>Import Archive Data</DialogTitle>
-                  <DialogDescription>Upload a JSON file to import it into the archive system.</DialogDescription>
+                  <DialogTitle>Import Archive Data with Enhanced Categorization</DialogTitle>
+                  <DialogDescription>
+                    Upload a JSON file to import it into the archive system. Items will be automatically categorized as
+                    drinks or food, including proper add-on categorization.
+                  </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
@@ -432,20 +559,33 @@ export default function ArchivePage() {
 
                   {importPreview.length > 0 && (
                     <div className="space-y-3 max-h-60 overflow-y-auto border rounded-lg p-3 bg-muted">
-                      <h4 className="font-medium text-sm">Import Preview:</h4>
+                      <h4 className="font-medium text-sm">Import Preview with Enhanced Categorization:</h4>
                       {importPreview.map((session, index) => (
                         <div key={index} className="p-2 bg-background rounded border text-sm">
                           <div className="font-medium">{session.name}</div>
                           <div className="text-muted-foreground text-xs">
                             {session.orderCount} orders • {session.totalItems} items • ${session.totalSales.toFixed(2)}
                           </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Orders:{" "}
-                            {session.orders
-                              .map((order) =>
-                                order.items.map((item) => `${item.quantity}x ${item.menuItem.name}`).join(", "),
-                              )
-                              .join(" | ")}
+                          <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                            {session.orders.slice(0, 2).map((order, orderIndex) => (
+                              <div key={orderIndex} className="flex flex-wrap gap-1">
+                                {order.items.map((item, itemIndex) => (
+                                  <span key={itemIndex} className="inline-flex items-center gap-1">
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-xs ${getCategoryBadgeColor(item.menuItem.category)}`}
+                                    >
+                                      {getCategoryIcon(item.menuItem.category)} {item.quantity}x {item.menuItem.name}
+                                    </Badge>
+                                  </span>
+                                ))}
+                              </div>
+                            ))}
+                            {session.orders.length > 2 && (
+                              <div className="text-xs text-muted-foreground">
+                                +{session.orders.length - 2} more orders...
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -453,8 +593,25 @@ export default function ArchivePage() {
                   )}
 
                   <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg text-sm border border-blue-200 dark:border-blue-800">
-                    <p className="font-medium text-blue-800 dark:text-blue-200 mb-1">Expected JSON Format:</p>
-                    <code className="text-xs text-blue-700 dark:text-blue-300 block">
+                    <p className="font-medium text-blue-800 dark:text-blue-200 mb-2">Enhanced Smart Categorization:</p>
+                    <div className="space-y-2 text-blue-700 dark:text-blue-300 text-xs">
+                      <div>
+                        <strong>🥤 Drinks:</strong> Coffee items, lattes, iced drinks + drink add-ons (oatmilk, syrup,
+                        extra shot)
+                      </div>
+                      <div>
+                        <strong>🍪 Food:</strong> Cookies, cakes, wraps, solid items + food add-ons (eggs/telur, cheese,
+                        proteins)
+                      </div>
+                      <div>
+                        <strong>🎯 Smart Add-ons:</strong> Milk alternatives & syrups → drinks, Eggs & proteins → food
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-gray-50 dark:bg-gray-950 rounded-lg text-sm border border-gray-200 dark:border-gray-800">
+                    <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">Expected JSON Format:</p>
+                    <code className="text-xs text-gray-700 dark:text-gray-300 block">
                       {`{"Date String": [{"id": number, "details": {"Item Name": {"price": number, "quantity": number}}, "timestamp": "string"}]}`}
                     </code>
                   </div>
@@ -589,8 +746,12 @@ export default function ArchivePage() {
 
                             <div className="flex flex-wrap gap-1 mb-2">
                               {order.items.slice(0, 3).map((item, index) => (
-                                <Badge key={index} variant="secondary" className="text-xs">
-                                  {item.quantity}x {item.menuItem.name}
+                                <Badge
+                                  key={index}
+                                  variant="secondary"
+                                  className={`text-xs ${getCategoryBadgeColor(item.menuItem.category)}`}
+                                >
+                                  {getCategoryIcon(item.menuItem.category)} {item.quantity}x {item.menuItem.name}
                                 </Badge>
                               ))}
                               {order.items.length > 3 && (
@@ -633,22 +794,30 @@ export default function ArchivePage() {
                                     <div className="border-t border-b py-4 space-y-3">
                                       {order.items.map((item, index) => (
                                         <div key={index} className="space-y-1">
-                                          <div className="flex justify-between">
-                                            <span className="font-medium">
-                                              {item.quantity}x {item.menuItem.name}
-                                            </span>
+                                          <div className="flex justify-between items-start">
+                                            <div className="flex items-center gap-2">
+                                              <Badge
+                                                variant="outline"
+                                                className={`text-xs ${getCategoryBadgeColor(item.menuItem.category)}`}
+                                              >
+                                                {getCategoryIcon(item.menuItem.category)}
+                                              </Badge>
+                                              <span className="font-medium">
+                                                {item.quantity}x {item.menuItem.name}
+                                              </span>
+                                            </div>
                                             <span>${item.subtotal.toFixed(2)}</span>
                                           </div>
-                                          <div className="text-xs text-muted-foreground ml-4">
+                                          <div className="text-xs text-muted-foreground ml-8">
                                             ${item.menuItem.price.toFixed(2)} each
                                           </div>
                                           {item.addOns && item.addOns.length > 0 && (
-                                            <div className="text-xs text-muted-foreground ml-4">
+                                            <div className="text-xs text-muted-foreground ml-8">
                                               Add-ons: {getAddOnNames(item.addOns)}
                                             </div>
                                           )}
                                           {item.customText && (
-                                            <div className="text-xs text-muted-foreground ml-4">
+                                            <div className="text-xs text-muted-foreground ml-8">
                                               Note: {item.customText}
                                             </div>
                                           )}

@@ -486,6 +486,26 @@ export default function OrderPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="payment">Amount Received ($)</Label>
+                <div className="flex gap-2 mb-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPaymentAmount("5.00")}
+                    className="flex-1"
+                  >
+                    $5
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPaymentAmount("10.00")}
+                    className="flex-1"
+                  >
+                    $10
+                  </Button>
+                </div>
                 <Input
                   id="payment"
                   type="number"
@@ -494,6 +514,7 @@ export default function OrderPage() {
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   placeholder="0.00"
                   className="text-lg text-center"
+                  autoFocus={false}
                 />
               </div>
 

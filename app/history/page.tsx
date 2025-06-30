@@ -1,12 +1,11 @@
 "use client"
 
-import { DialogFooter } from "@/components/ui/dialog"
-
 import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -26,10 +25,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { ArrowLeft, Receipt, Search, Calendar, Clock, Archive, Trash2 } from "lucide-react"
+import { ArrowLeft, Receipt, Search, Calendar, Trash2, Archive } from "lucide-react"
 import Link from "next/link"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface AddOn {
   name: string
@@ -60,120 +59,124 @@ interface Order {
   date: string
 }
 
+interface SaleSession {
+  id: string
+  name?: string
+  date: string
+  closedAt: string
+  orders: Order[]
+  totalSales: number
+  totalItems: number
+  orderCount: number
+}
+
 export default function HistoryPage() {
-  const [todayOrders, setTodayOrders] = useState<Order[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [sortBy, setSortBy] = useState<"date" | "total">("date")
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showCloseSaleDialog, setShowCloseSaleDialog] = useState(false)
-  const [saleOption, setSaleOption] = useState<"new" | "existing">("new")
-  const [selectedExistingSession, setSelectedExistingSession] = useState("")
-  const [newSessionName, setNewSessionName] = useState("")
-  const [existingSessions, setExistingSessions] = useState<any[]>([])
+  const [saleSessionName, setSaleSessionName] = useState("")
+  const [existingSessions, setExistingSessions] = useState<SaleSession[]>([])
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("")
+  const [createNewSession, setCreateNewSession] = useState(true)
 
   useEffect(() => {
-    loadTodayOrders()
+    loadOrders()
     loadExistingSessions()
-  }, [])
+  }, [sortBy])
+
+  const loadOrders = () => {
+    const savedOrders = localStorage.getItem("cafe-orders")
+    if (savedOrders) {
+      const orderList: Order[] = JSON.parse(savedOrders)
+
+      // Sort orders
+      orderList.sort((a, b) => {
+        if (sortBy === "date") {
+          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        } else {
+          return b.total - a.total
+        }
+      })
+
+      setOrders(orderList)
+    }
+  }
 
   const loadExistingSessions = () => {
     const savedArchive = localStorage.getItem("cafe-archive")
     if (savedArchive) {
-      const sessions = JSON.parse(savedArchive)
-      const today = new Date().toDateString()
-      const todaySessions = sessions.filter((session: any) => session.date === today)
-      setExistingSessions(todaySessions)
-    }
-  }
-
-  const loadTodayOrders = () => {
-    const savedOrders = localStorage.getItem("cafe-orders")
-    if (savedOrders) {
-      const orders = JSON.parse(savedOrders)
-      const today = new Date().toDateString()
-      const todaysOrders = orders
-        .filter((order: Order) => order.date === today)
-        .sort((a: Order, b: Order) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      setTodayOrders(todaysOrders)
+      const sessions: SaleSession[] = JSON.parse(savedArchive)
+      setExistingSessions(sessions)
     }
   }
 
   const deleteOrder = (orderId: string) => {
-    const allOrders = JSON.parse(localStorage.getItem("cafe-orders") || "[]")
-    const updatedOrders = allOrders.filter((order: Order) => order.id !== orderId)
+    const updatedOrders = orders.filter((order) => order.id !== orderId)
     localStorage.setItem("cafe-orders", JSON.stringify(updatedOrders))
-
-    // Refresh today's orders
-    loadTodayOrders()
+    setOrders(updatedOrders)
   }
 
   const closeSale = () => {
-    if (todayOrders.length === 0) {
+    if (orders.length === 0) {
       alert("No orders to archive!")
       return
     }
 
-    const today = new Date().toDateString()
-    const totalSales = todayOrders.reduce((sum, order) => sum + order.total, 0)
-    const totalItems = todayOrders.reduce(
+    const totalSales = orders.reduce((sum, order) => sum + order.total, 0)
+    const totalItems = orders.reduce(
       (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
       0,
     )
 
-    if (saleOption === "new") {
-      // Create new sale session
-      const saleSession = {
+    if (createNewSession) {
+      // Create new session
+      const newSession: SaleSession = {
         id: Date.now().toString(),
-        name: newSessionName || `Sale Session ${new Date().toLocaleTimeString()}`,
-        date: today,
+        name: saleSessionName.trim() || undefined,
+        date: new Date().toDateString(),
         closedAt: new Date().toLocaleString(),
-        orders: todayOrders,
+        orders: [...orders],
         totalSales,
         totalItems,
-        orderCount: todayOrders.length,
+        orderCount: orders.length,
       }
 
       const existingArchive = JSON.parse(localStorage.getItem("cafe-archive") || "[]")
-      const updatedArchive = [...existingArchive, saleSession]
+      const updatedArchive = [...existingArchive, newSession]
       localStorage.setItem("cafe-archive", JSON.stringify(updatedArchive))
-
-      alert(
-        `New sale session "${saleSession.name}" created! ${saleSession.orderCount} orders archived with total sales of $${saleSession.totalSales.toFixed(2)}`,
-      )
     } else {
       // Add to existing session
       const existingArchive = JSON.parse(localStorage.getItem("cafe-archive") || "[]")
-      const sessionIndex = existingArchive.findIndex((session: any) => session.id === selectedExistingSession)
-
-      if (sessionIndex !== -1) {
-        const existingSession = existingArchive[sessionIndex]
-        existingSession.orders = [...existingSession.orders, ...todayOrders]
-        existingSession.totalSales += totalSales
-        existingSession.totalItems += totalItems
-        existingSession.orderCount += todayOrders.length
-        existingSession.lastUpdated = new Date().toLocaleString()
-
-        localStorage.setItem("cafe-archive", JSON.stringify(existingArchive))
-
-        alert(
-          `Added ${todayOrders.length} orders to "${existingSession.name}"! Session now has ${existingSession.orderCount} total orders with $${existingSession.totalSales.toFixed(2)} in sales.`,
-        )
-      }
+      const updatedArchive = existingArchive.map((session: SaleSession) => {
+        if (session.id === selectedSessionId) {
+          return {
+            ...session,
+            orders: [...session.orders, ...orders],
+            totalSales: session.totalSales + totalSales,
+            totalItems: session.totalItems + totalItems,
+            orderCount: session.orderCount + orders.length,
+            lastUpdated: new Date().toLocaleString(),
+          }
+        }
+        return session
+      })
+      localStorage.setItem("cafe-archive", JSON.stringify(updatedArchive))
     }
 
-    // Clear today's orders
-    const allOrders = JSON.parse(localStorage.getItem("cafe-orders") || "[]")
-    const remainingOrders = allOrders.filter((order: Order) => order.date !== today)
-    localStorage.setItem("cafe-orders", JSON.stringify(remainingOrders))
-
-    // Reset and refresh
-    setTodayOrders([])
+    // Clear current orders
+    localStorage.setItem("cafe-orders", "[]")
+    setOrders([])
     setShowCloseSaleDialog(false)
-    setSaleOption("new")
-    setSelectedExistingSession("")
-    setNewSessionName("")
+    setSaleSessionName("")
+    setSelectedSessionId("")
+    setCreateNewSession(true)
+
+    alert("Sale session closed successfully!")
   }
 
-  const filteredOrders = todayOrders.filter(
+  const filteredOrders = orders.filter(
     (order) =>
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.items.some((item) => item.menuItem.name.toLowerCase().includes(searchTerm.toLowerCase())),
@@ -202,29 +205,15 @@ export default function HistoryPage() {
         return timestamp // Return original if parsing fails
       }
 
-      return date.toLocaleTimeString("en-US", {
+      return date.toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       })
     } catch (error) {
       return timestamp // Return original if any error occurs
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString)
-      if (isNaN(date.getTime())) {
-        return dateString // Return original if invalid
-      }
-      return date.toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    } catch (error) {
-      return dateString
     }
   }
 
@@ -248,33 +237,32 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Receipt History</h1>
-            <p className="text-gray-600">Today's order history and receipts</p>
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="outline" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Receipt History</h1>
+              <p className="text-muted-foreground">View and manage order history</p>
+            </div>
           </div>
+          <ThemeToggle />
         </div>
 
-        {/* Stats and Controls */}
+        {/* Controls */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div className="flex gap-4">
             <Badge variant="secondary" className="text-sm">
-              <Calendar className="h-4 w-4 mr-1" />
-              {formatDate(new Date().toDateString())}
-            </Badge>
-            <Badge variant="secondary" className="text-sm">
               <Receipt className="h-4 w-4 mr-1" />
-              {todayOrders.length} Orders
+              {orders.length} Orders
             </Badge>
             <Badge variant="secondary" className="text-sm">
-              Total: ${todayOrders.reduce((sum, order) => sum + order.total, 0).toFixed(2)}
+              Total: ${orders.reduce((sum, order) => sum + order.total, 0).toFixed(2)}
             </Badge>
           </div>
 
@@ -289,171 +277,57 @@ export default function HistoryPage() {
               />
             </div>
 
-            <Dialog open={showCloseSaleDialog} onOpenChange={setShowCloseSaleDialog}>
-              <DialogTrigger asChild>
-                <Button variant="outline" disabled={todayOrders.length === 0}>
-                  <Archive className="h-4 w-4 mr-2" />
-                  Close Sale
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                  <DialogTitle>Close Sale Session</DialogTitle>
-                  <DialogDescription>
-                    Choose how to archive {todayOrders.length} orders (total: $
-                    {todayOrders.reduce((sum, order) => sum + order.total, 0).toFixed(2)})
-                  </DialogDescription>
-                </DialogHeader>
+            <Button
+              variant="outline"
+              onClick={() => setShowCloseSaleDialog(true)}
+              disabled={orders.length === 0}
+              className="bg-green-50 hover:bg-green-100 dark:bg-green-950 dark:hover:bg-green-900 border-green-200 dark:border-green-800"
+            >
+              <Archive className="h-4 w-4 mr-2" />
+              Close Sale
+            </Button>
 
-                <div className="space-y-4 py-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="new-session"
-                        name="sale-option"
-                        value="new"
-                        checked={saleOption === "new"}
-                        onChange={(e) => setSaleOption(e.target.value as "new" | "existing")}
-                        className="w-4 h-4"
-                      />
-                      <Label htmlFor="new-session" className="font-medium">
-                        Create New Sale Session
-                      </Label>
-                    </div>
-
-                    {saleOption === "new" && (
-                      <div className="ml-6 space-y-2">
-                        <Label htmlFor="session-name" className="text-sm">
-                          Session Name (optional)
-                        </Label>
-                        <Input
-                          id="session-name"
-                          value={newSessionName}
-                          onChange={(e) => setNewSessionName(e.target.value)}
-                          placeholder={`Sale Session ${new Date().toLocaleTimeString()}`}
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        id="existing-session"
-                        name="sale-option"
-                        value="existing"
-                        checked={saleOption === "existing"}
-                        onChange={(e) => setSaleOption(e.target.value as "new" | "existing")}
-                        disabled={existingSessions.length === 0}
-                        className="w-4 h-4"
-                      />
-                      <Label htmlFor="existing-session" className="font-medium">
-                        Add to Existing Session
-                        {existingSessions.length === 0 && (
-                          <span className="text-gray-500 text-sm ml-2">(No existing sessions today)</span>
-                        )}
-                      </Label>
-                    </div>
-
-                    {saleOption === "existing" && existingSessions.length > 0 && (
-                      <div className="ml-6 space-y-2">
-                        <Label htmlFor="existing-select" className="text-sm">
-                          Select Session
-                        </Label>
-                        <Select value={selectedExistingSession} onValueChange={setSelectedExistingSession}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose existing session..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {existingSessions.map((session) => (
-                              <SelectItem key={session.id} value={session.id}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{session.name}</span>
-                                  <span className="text-xs text-gray-500">
-                                    {session.orderCount} orders • ${session.totalSales.toFixed(2)}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-3 bg-yellow-50 rounded-lg">
-                    <p className="text-sm text-yellow-800">
-                      <strong>Note:</strong> This will clear today's receipt history and move all orders to the archive.
-                      This action cannot be undone.
-                    </p>
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowCloseSaleDialog(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={closeSale}
-                    disabled={saleOption === "existing" && (!selectedExistingSession || existingSessions.length === 0)}
-                  >
-                    {saleOption === "new" ? "Create New Session" : "Add to Session"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Select value={sortBy} onValueChange={(value: "date" | "total") => setSortBy(value)}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">By Date</SelectItem>
+                <SelectItem value="total">By Total</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         {/* Orders List */}
         {filteredOrders.length === 0 ? (
           <div className="text-center py-12">
-            <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {todayOrders.length === 0 ? "No orders today" : "No orders found"}
+            <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              {orders.length === 0 ? "No orders yet" : "No results found"}
             </h3>
-            <p className="text-gray-600">
-              {todayOrders.length === 0 ? "Start taking orders to see them here." : "Try adjusting your search terms."}
+            <p className="text-muted-foreground">
+              {orders.length === 0 ? "Orders will appear here after checkout." : "Try adjusting your search terms."}
             </p>
-            {todayOrders.length === 0 && (
-              <Link href="/order">
-                <Button className="mt-4">Create New Order</Button>
-              </Link>
-            )}
           </div>
         ) : (
           <div className="grid gap-4">
             {filteredOrders.map((order) => (
-              <Card key={order.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="pt-6">
+              <Card key={order.id}>
+                <CardHeader>
                   <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold">Order #{order.id.slice(-6)}</h3>
-                        <Badge variant="outline" className="text-xs">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {formatTime(order.timestamp)}
-                        </Badge>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {order.items.map((item, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {item.quantity}x {item.menuItem.name}
-                          </Badge>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span>{getTotalItems(order)} items</span>
-                        <span>•</span>
-                        <span>{order.items.length} different products</span>
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <CardTitle className="text-lg">Order #{order.id.slice(-6)}</CardTitle>
+                        <CardDescription>{formatTime(order.timestamp)}</CardDescription>
                       </div>
                     </div>
-
-                    <div className="text-right ml-4">
-                      <div className="text-2xl font-bold text-green-600 mb-2">${order.total.toFixed(2)}</div>
-
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-600">${order.total.toFixed(2)}</div>
+                        <div className="text-sm text-muted-foreground">{getTotalItems(order)} items</div>
+                      </div>
                       <div className="flex gap-2">
                         <Dialog>
                           <DialogTrigger asChild>
@@ -472,11 +346,13 @@ export default function HistoryPage() {
                             <div className="py-4">
                               <div className="text-center mb-4">
                                 <h3 className="font-bold text-lg">DDAL.licious Receipt</h3>
-                                <p className="text-sm text-gray-600">{formatTime(order.timestamp)}</p>
-                                <p className="text-xs text-gray-500">Order ID: {order.id}</p>
+                                <p className="text-sm text-muted-foreground">{formatTime(order.timestamp)}</p>
+                                <p className="text-xs text-muted-foreground">Order ID: {order.id}</p>
                               </div>
 
-                              <div className="border-t border-b py-4 space-y-3">
+                              <Separator className="my-4" />
+
+                              <div className="space-y-3">
                                 {order.items.map((item, index) => (
                                   <div key={index} className="space-y-1">
                                     <div className="flex justify-between">
@@ -485,29 +361,30 @@ export default function HistoryPage() {
                                       </span>
                                       <span>${item.subtotal.toFixed(2)}</span>
                                     </div>
-                                    <div className="text-xs text-gray-600 ml-4">
+                                    <div className="text-xs text-muted-foreground ml-4">
                                       ${item.menuItem.price.toFixed(2)} each
                                     </div>
                                     {item.addOns && item.addOns.length > 0 && (
-                                      <div className="text-xs text-gray-600 ml-4">
+                                      <div className="text-xs text-muted-foreground ml-4">
                                         Add-ons: {getAddOnNames(item.addOns)}
                                       </div>
                                     )}
                                     {item.customText && (
-                                      <div className="text-xs text-gray-600 ml-4">Note: {item.customText}</div>
+                                      <div className="text-xs text-muted-foreground ml-4">Note: {item.customText}</div>
                                     )}
                                   </div>
                                 ))}
                               </div>
 
-                              <div className="pt-4">
-                                <div className="flex justify-between items-center text-lg font-bold">
-                                  <span>Total:</span>
-                                  <span>${order.total.toFixed(2)}</span>
-                                </div>
-                                <div className="text-center mt-4 text-xs text-gray-500">
-                                  Thank you for choosing DDAL.licious!
-                                </div>
+                              <Separator className="my-4" />
+
+                              <div className="flex justify-between items-center text-lg font-bold">
+                                <span>Total:</span>
+                                <span>${order.total.toFixed(2)}</span>
+                              </div>
+
+                              <div className="text-center mt-4 text-xs text-muted-foreground">
+                                Thank you for choosing DDAL.licious!
                               </div>
                             </div>
                           </DialogContent>
@@ -523,8 +400,8 @@ export default function HistoryPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Order</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete Order #{order.id.slice(-6)}? This will permanently
-                                remove the order and cannot be undone.
+                                Are you sure you want to delete Order #{order.id.slice(-6)}? This action cannot be
+                                undone.
                                 <br />
                                 <br />
                                 <strong>Order Details:</strong>
@@ -547,11 +424,133 @@ export default function HistoryPage() {
                       </div>
                     </div>
                   </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-1">
+                    {order.items.slice(0, 4).map((item, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {item.quantity}x {item.menuItem.name}
+                      </Badge>
+                    ))}
+                    {order.items.length > 4 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{order.items.length - 4} more
+                      </Badge>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
+
+        {/* Close Sale Dialog */}
+        <Dialog open={showCloseSaleDialog} onOpenChange={setShowCloseSaleDialog}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Close Sale Session</DialogTitle>
+              <DialogDescription>
+                Archive current orders and close the sale session. You can create a new session or add to an existing
+                one.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">Session Summary</h4>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <div>Orders: {orders.length}</div>
+                  <div>Total Items: {orders.reduce((sum, order) => sum + getTotalItems(order), 0)}</div>
+                  <div className="font-medium text-green-600">
+                    Total Sales: ${orders.reduce((sum, order) => sum + order.total, 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="new-session"
+                    name="session-type"
+                    checked={createNewSession}
+                    onChange={() => setCreateNewSession(true)}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="new-session" className="text-sm font-medium">
+                    Create new session
+                  </label>
+                </div>
+
+                {createNewSession && (
+                  <div className="ml-6 space-y-2">
+                    <label htmlFor="session-name" className="text-sm font-medium">
+                      Session Name (optional)
+                    </label>
+                    <Input
+                      id="session-name"
+                      value={saleSessionName}
+                      onChange={(e) => setSaleSessionName(e.target.value)}
+                      placeholder="e.g., Morning Rush, Evening Shift"
+                    />
+                  </div>
+                )}
+
+                {existingSessions.length > 0 && (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="existing-session"
+                        name="session-type"
+                        checked={!createNewSession}
+                        onChange={() => setCreateNewSession(false)}
+                        className="w-4 h-4"
+                      />
+                      <label htmlFor="existing-session" className="text-sm font-medium">
+                        Add to existing session
+                      </label>
+                    </div>
+
+                    {!createNewSession && (
+                      <div className="ml-6 space-y-2">
+                        <label htmlFor="existing-session-select" className="text-sm font-medium">
+                          Select Session
+                        </label>
+                        <Select value={selectedSessionId} onValueChange={setSelectedSessionId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a session" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {existingSessions.map((session) => (
+                              <SelectItem key={session.id} value={session.id}>
+                                {session.name || `Session - ${new Date(session.date).toLocaleDateString()}`} (
+                                {session.orderCount} orders, ${session.totalSales.toFixed(2)})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowCloseSaleDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={closeSale}
+                disabled={!createNewSession && !selectedSessionId}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Close Sale
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

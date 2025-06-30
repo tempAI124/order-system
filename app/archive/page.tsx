@@ -30,6 +30,7 @@ import {
 import { ArrowLeft, Archive, Search, Receipt, ChevronDown, ChevronRight, Calendar, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { Label } from "@/components/ui/label"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface AddOn {
   name: string
@@ -337,18 +338,21 @@ export default function ArchivePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Archive</h1>
-            <p className="text-gray-600">View archived sale sessions</p>
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="outline" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Archive</h1>
+              <p className="text-muted-foreground">View archived sale sessions</p>
+            </div>
           </div>
+          <ThemeToggle />
         </div>
 
         {/* Controls */}
@@ -394,7 +398,7 @@ export default function ArchivePage() {
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <Label htmlFor="import-file">JSON File</Label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                    <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center hover:border-muted-foreground/50 transition-colors">
                       <input
                         id="import-file"
                         type="file"
@@ -403,13 +407,13 @@ export default function ArchivePage() {
                         className="hidden"
                       />
                       <label htmlFor="import-file" className="cursor-pointer flex flex-col items-center gap-2">
-                        <Archive className="h-8 w-8 text-gray-400" />
+                        <Archive className="h-8 w-8 text-muted-foreground" />
                         <span className="text-sm font-medium">Click to upload JSON file</span>
-                        <span className="text-xs text-gray-500">or drag and drop</span>
+                        <span className="text-xs text-muted-foreground">or drag and drop</span>
                       </label>
                     </div>
                     {importData && (
-                      <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                      <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
                         <strong>File loaded:</strong> {Math.round(importData.length / 1024)}KB
                       </div>
                     )}
@@ -427,15 +431,15 @@ export default function ArchivePage() {
                   </div>
 
                   {importPreview.length > 0 && (
-                    <div className="space-y-3 max-h-60 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                    <div className="space-y-3 max-h-60 overflow-y-auto border rounded-lg p-3 bg-muted">
                       <h4 className="font-medium text-sm">Import Preview:</h4>
                       {importPreview.map((session, index) => (
-                        <div key={index} className="p-2 bg-white rounded border text-sm">
+                        <div key={index} className="p-2 bg-background rounded border text-sm">
                           <div className="font-medium">{session.name}</div>
-                          <div className="text-gray-600 text-xs">
+                          <div className="text-muted-foreground text-xs">
                             {session.orderCount} orders • {session.totalItems} items • ${session.totalSales.toFixed(2)}
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-muted-foreground mt-1">
                             Orders:{" "}
                             {session.orders
                               .map((order) =>
@@ -448,9 +452,9 @@ export default function ArchivePage() {
                     </div>
                   )}
 
-                  <div className="p-3 bg-blue-50 rounded-lg text-sm">
-                    <p className="font-medium text-blue-800 mb-1">Expected JSON Format:</p>
-                    <code className="text-xs text-blue-700 block">
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg text-sm border border-blue-200 dark:border-blue-800">
+                    <p className="font-medium text-blue-800 dark:text-blue-200 mb-1">Expected JSON Format:</p>
+                    <code className="text-xs text-blue-700 dark:text-blue-300 block">
                       {`{"Date String": [{"id": number, "details": {"Item Name": {"price": number, "quantity": number}}, "timestamp": "string"}]}`}
                     </code>
                   </div>
@@ -486,11 +490,11 @@ export default function ArchivePage() {
         {/* Archive List */}
         {filteredSessions.length === 0 ? (
           <div className="text-center py-12">
-            <Archive className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <Archive className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
               {salesSessions.length === 0 ? "No archived sessions" : "No results found"}
             </h3>
-            <p className="text-gray-600">
+            <p className="text-muted-foreground">
               {salesSessions.length === 0
                 ? "Closed sale sessions will appear here."
                 : "Try adjusting your search terms."}
@@ -501,15 +505,15 @@ export default function ArchivePage() {
             {filteredSessions.map((session) => (
               <Card key={session.id}>
                 <CardHeader
-                  className="cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={() => toggleSessionExpansion(session.id)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {expandedSessions.has(session.id) ? (
-                        <ChevronDown className="h-5 w-5 text-gray-500" />
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
                       ) : (
-                        <ChevronRight className="h-5 w-5 text-gray-500" />
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
                       )}
                       <div>
                         <CardTitle className="text-lg flex items-center gap-2">
@@ -529,7 +533,7 @@ export default function ArchivePage() {
                     <div className="flex items-center gap-3">
                       <div className="text-right">
                         <div className="text-2xl font-bold text-green-600">${session.totalSales.toFixed(2)}</div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-muted-foreground">
                           ${(session.totalSales / session.orderCount).toFixed(2)} avg
                         </div>
                       </div>
@@ -574,7 +578,7 @@ export default function ArchivePage() {
                   <CardContent className="pt-0">
                     <div className="space-y-3">
                       {session.orders.map((order) => (
-                        <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div key={order.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium">Order #{order.id.slice(-6)}</span>
@@ -596,7 +600,7 @@ export default function ArchivePage() {
                               )}
                             </div>
 
-                            <div className="text-xs text-gray-600">{getTotalItems(order)} items total</div>
+                            <div className="text-xs text-muted-foreground">{getTotalItems(order)} items total</div>
                           </div>
 
                           <div className="flex items-center gap-3 ml-4">
@@ -622,8 +626,8 @@ export default function ArchivePage() {
                                   <div className="py-4">
                                     <div className="text-center mb-4">
                                       <h3 className="font-bold text-lg">DDAL.licious Receipt</h3>
-                                      <p className="text-sm text-gray-600">{formatTime(order.timestamp)}</p>
-                                      <p className="text-xs text-gray-500">Order ID: {order.id}</p>
+                                      <p className="text-sm text-muted-foreground">{formatTime(order.timestamp)}</p>
+                                      <p className="text-xs text-muted-foreground">Order ID: {order.id}</p>
                                     </div>
 
                                     <div className="border-t border-b py-4 space-y-3">
@@ -635,16 +639,18 @@ export default function ArchivePage() {
                                             </span>
                                             <span>${item.subtotal.toFixed(2)}</span>
                                           </div>
-                                          <div className="text-xs text-gray-600 ml-4">
+                                          <div className="text-xs text-muted-foreground ml-4">
                                             ${item.menuItem.price.toFixed(2)} each
                                           </div>
                                           {item.addOns && item.addOns.length > 0 && (
-                                            <div className="text-xs text-gray-600 ml-4">
+                                            <div className="text-xs text-muted-foreground ml-4">
                                               Add-ons: {getAddOnNames(item.addOns)}
                                             </div>
                                           )}
                                           {item.customText && (
-                                            <div className="text-xs text-gray-600 ml-4">Note: {item.customText}</div>
+                                            <div className="text-xs text-muted-foreground ml-4">
+                                              Note: {item.customText}
+                                            </div>
                                           )}
                                         </div>
                                       ))}
@@ -655,7 +661,7 @@ export default function ArchivePage() {
                                         <span>Total:</span>
                                         <span>${order.total.toFixed(2)}</span>
                                       </div>
-                                      <div className="text-center mt-4 text-xs text-gray-500">
+                                      <div className="text-center mt-4 text-xs text-muted-foreground">
                                         Thank you for choosing DDAL.licious!
                                       </div>
                                     </div>

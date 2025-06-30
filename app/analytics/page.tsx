@@ -4,23 +4,29 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, TrendingUp, DollarSign, ShoppingCart, Calendar } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  ArrowLeft,
+  TrendingUp,
+  DollarSign,
+  ShoppingCart,
+  Clock,
+  Coffee,
+  UtensilsCrossed,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react"
 import Link from "next/link"
-
-interface MenuItem {
-  id: string
-  name: string
-  price: number
-  category: "drink" | "food"
-  addOns: string[]
-  customField: string
-}
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface OrderItem {
-  menuItem: MenuItem
+  menuItem: {
+    id: string
+    name: string
+    price: number
+    category: "drink" | "food"
+  }
   quantity: number
-  addOns: string[]
-  customText: string
   subtotal: number
 }
 
@@ -32,241 +38,401 @@ interface Order {
   date: string
 }
 
-interface DayStats {
+interface SaleSession {
+  id: string
+  name?: string
   date: string
+  closedAt: string
+  orders: Order[]
   totalSales: number
-  itemsSold: number
+  totalItems: number
   orderCount: number
 }
 
-interface ItemStats {
-  item: MenuItem
-  quantitySold: number
-  revenue: number
+interface Analytics {
+  totalRevenue: number
+  totalOrders: number
+  totalItems: number
+  averageOrderValue: number
+  topSellingItems: Array<{ name: string; quantity: number; revenue: number; category: string }>
+  revenueByCategory: { drinks: number; food: number }
+  ordersByHour: Array<{ hour: number; count: number }>
+  dailyRevenue: Array<{ date: string; revenue: number; orders: number }>
 }
 
 export default function AnalyticsPage() {
-  const [todayStats, setTodayStats] = useState<DayStats>({ date: "", totalSales: 0, itemsSold: 0, orderCount: 0 })
-  const [weekStats, setWeekStats] = useState<DayStats[]>([])
-  const [topItems, setTopItems] = useState<ItemStats[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
+  const [analytics, setAnalytics] = useState<Analytics | null>(null)
+  const [timeRange, setTimeRange] = useState<"today" | "week" | "month" | "all">("all")
+  const [showAllItems, setShowAllItems] = useState(false)
 
   useEffect(() => {
-    const savedOrders = localStorage.getItem("cafe-orders")
-    if (savedOrders) {
-      const allOrders: Order[] = JSON.parse(savedOrders)
-      setOrders(allOrders)
+    calculateAnalytics()
+  }, [timeRange])
 
-      const today = new Date().toDateString()
-      const todaysOrders = allOrders.filter((order) => order.date === today)
+  const calculateAnalytics = () => {
+    // Get current orders
+    const currentOrders: Order[] = JSON.parse(localStorage.getItem("cafe-orders") || "[]")
 
-      // Calculate today's stats
-      const totalSales = todaysOrders.reduce((sum, order) => sum + order.total, 0)
-      const itemsSold = todaysOrders.reduce(
-        (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
-        0,
-      )
+    // Get archived orders
+    const archivedSessions: SaleSession[] = JSON.parse(localStorage.getItem("cafe-archive") || "[]")
+    const archivedOrders: Order[] = archivedSessions.flatMap((session) => session.orders)
 
-      setTodayStats({
-        date: today,
-        totalSales,
-        itemsSold,
-        orderCount: todaysOrders.length,
-      })
+    // Combine all orders
+    let allOrders = [...currentOrders, ...archivedOrders]
 
-      // Calculate week stats
-      const last7Days = Array.from({ length: 7 }, (_, i) => {
-        const date = new Date()
-        date.setDate(date.getDate() - i)
-        return date.toDateString()
-      }).reverse()
+    // Filter by time range
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
 
-      const weeklyStats = last7Days.map((date) => {
-        const dayOrders = allOrders.filter((order) => order.date === date)
-        return {
-          date,
-          totalSales: dayOrders.reduce((sum, order) => sum + order.total, 0),
-          itemsSold: dayOrders.reduce(
-            (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
-            0,
-          ),
-          orderCount: dayOrders.length,
+    if (timeRange !== "all") {
+      allOrders = allOrders.filter((order) => {
+        const orderDate = new Date(order.timestamp)
+        switch (timeRange) {
+          case "today":
+            return orderDate >= today
+          case "week":
+            return orderDate >= weekAgo
+          case "month":
+            return orderDate >= monthAgo
+          default:
+            return true
         }
       })
+    }
 
-      setWeekStats(weeklyStats)
+    // Calculate basic metrics
+    const totalRevenue = allOrders.reduce((sum, order) => sum + order.total, 0)
+    const totalOrders = allOrders.length
+    const totalItems = allOrders.reduce(
+      (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+      0,
+    )
+    const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
 
-      // Calculate top items
-      const itemMap = new Map<string, ItemStats>()
+    // Calculate top selling items
+    const itemSales: { [key: string]: { name: string; quantity: number; revenue: number; category: string } } = {}
 
-      allOrders.forEach((order) => {
-        order.items.forEach((orderItem) => {
-          const key = orderItem.menuItem.id
-          if (itemMap.has(key)) {
-            const existing = itemMap.get(key)!
-            existing.quantitySold += orderItem.quantity
-            existing.revenue += orderItem.subtotal
+    allOrders.forEach((order) => {
+      order.items.forEach((item) => {
+        const key = item.menuItem.name
+        if (!itemSales[key]) {
+          itemSales[key] = {
+            name: item.menuItem.name,
+            quantity: 0,
+            revenue: 0,
+            category: item.menuItem.category,
+          }
+        }
+        itemSales[key].quantity += item.quantity
+        itemSales[key].revenue += item.subtotal
+      })
+    })
+
+    const topSellingItems = Object.values(itemSales).sort((a, b) => b.quantity - a.quantity)
+
+    // Calculate revenue by category
+    const revenueByCategory = allOrders.reduce(
+      (acc, order) => {
+        order.items.forEach((item) => {
+          if (item.menuItem.category === "drink") {
+            acc.drinks += item.subtotal
           } else {
-            itemMap.set(key, {
-              item: orderItem.menuItem,
-              quantitySold: orderItem.quantity,
-              revenue: orderItem.subtotal,
-            })
+            acc.food += item.subtotal
           }
         })
-      })
+        return acc
+      },
+      { drinks: 0, food: 0 },
+    )
 
-      const sortedItems = Array.from(itemMap.values())
-        .sort((a, b) => b.quantitySold - a.quantitySold)
-        .slice(0, 10)
+    // Calculate orders by hour - fix the undefined error
+    const ordersByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }))
+    allOrders.forEach((order) => {
+      try {
+        const orderDate = new Date(order.timestamp)
+        if (!isNaN(orderDate.getTime())) {
+          const hour = orderDate.getHours()
+          if (hour >= 0 && hour < 24 && ordersByHour[hour]) {
+            ordersByHour[hour].count++
+          }
+        }
+      } catch (error) {
+        console.warn("Invalid timestamp format:", order.timestamp)
+      }
+    })
 
-      setTopItems(sortedItems)
-    }
-  }, [])
+    // Calculate daily revenue
+    const dailyRevenueMap: { [key: string]: { revenue: number; orders: number } } = {}
+    allOrders.forEach((order) => {
+      const date = new Date(order.timestamp).toDateString()
+      if (!dailyRevenueMap[date]) {
+        dailyRevenueMap[date] = { revenue: 0, orders: 0 }
+      }
+      dailyRevenueMap[date].revenue += order.total
+      dailyRevenueMap[date].orders++
+    })
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    const dailyRevenue = Object.entries(dailyRevenueMap)
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-30) // Last 30 days
+
+    setAnalytics({
+      totalRevenue,
+      totalOrders,
+      totalItems,
+      averageOrderValue,
+      topSellingItems,
+      revenueByCategory,
+      ordersByHour,
+      dailyRevenue,
+    })
   }
 
-  const isToday = (dateString: string) => {
-    return dateString === new Date().toDateString()
+  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`
+
+  const getPeakHour = () => {
+    if (!analytics || !analytics.ordersByHour || analytics.ordersByHour.length === 0) return "N/A"
+    const peak = analytics.ordersByHour.reduce(
+      (max, current) => (current && current.count > (max?.count || 0) ? current : max),
+      { hour: 0, count: 0 },
+    )
+    return peak && peak.count > 0 ? `${peak.hour}:00 - ${peak.hour + 1}:00` : "N/A"
   }
+
+  if (!analytics) {
+    return <div>Loading...</div>
+  }
+
+  const displayedItems = showAllItems ? analytics.topSellingItems : analytics.topSellingItems.slice(0, 5)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-gray-600">View your DDAL.licious sales analytics and performance</p>
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="outline" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Analytics</h1>
+              <p className="text-muted-foreground">Sales insights and performance metrics</p>
+            </div>
           </div>
+          <ThemeToggle />
         </div>
 
-        {/* Today's Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Time Range Selector */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex gap-4">
+            <Badge variant="secondary" className="text-sm">
+              <TrendingUp className="h-4 w-4 mr-1" />
+              {timeRange.charAt(0).toUpperCase() + timeRange.slice(1)} View
+            </Badge>
+          </div>
+          <Select value={timeRange} onValueChange={(value: "today" | "week" | "month" | "all") => setTimeRange(value)}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">Last 7 Days</SelectItem>
+              <SelectItem value="month">Last 30 Days</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Key Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Sales</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${todayStats.totalSales.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">From {todayStats.orderCount} orders</p>
+              <div className="text-2xl font-bold text-green-600">{formatCurrency(analytics.totalRevenue)}</div>
+              <p className="text-xs text-muted-foreground">{analytics.totalOrders} orders</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Items Sold Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Average Order Value</CardTitle>
               <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todayStats.itemsSold}</div>
-              <p className="text-xs text-muted-foreground">Across all menu items</p>
+              <div className="text-2xl font-bold">{formatCurrency(analytics.averageOrderValue)}</div>
+              <p className="text-xs text-muted-foreground">{analytics.totalItems} items sold</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Average Order</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Peak Hour</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{getPeakHour()}</div>
+              <p className="text-xs text-muted-foreground">Busiest time period</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Items per Order</CardTitle>
+              <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${todayStats.orderCount > 0 ? (todayStats.totalSales / todayStats.orderCount).toFixed(2) : "0.00"}
+                {analytics.totalOrders > 0 ? (analytics.totalItems / analytics.totalOrders).toFixed(1) : "0"}
               </div>
-              <p className="text-xs text-muted-foreground">Per order today</p>
+              <p className="text-xs text-muted-foreground">Average items</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Weekly Overview */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Last 7 Days Overview
-            </CardTitle>
-            <CardDescription>Daily sales and performance metrics</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {weekStats.map((day, index) => (
-                <div
-                  key={index}
-                  className={`flex items-center justify-between p-4 rounded-lg border ${isToday(day.date) ? "bg-blue-50 border-blue-200" : "bg-gray-50"}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm font-medium min-w-[80px]">
-                      {isToday(day.date) ? "Today" : formatDate(day.date)}
-                    </div>
-                    <div className="flex gap-6 text-sm">
-                      <span className="text-gray-600">
-                        <span className="font-medium">{day.orderCount}</span> orders
-                      </span>
-                      <span className="text-gray-600">
-                        <span className="font-medium">{day.itemsSold}</span> items
-                      </span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Revenue by Category */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Revenue by Category</CardTitle>
+              <CardDescription>Sales breakdown by item type</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Coffee className="h-4 w-4" />
+                    <span>Drinks</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold">{formatCurrency(analytics.revenueByCategory.drinks)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {analytics.totalRevenue > 0
+                        ? ((analytics.revenueByCategory.drinks / analytics.totalRevenue) * 100).toFixed(1)
+                        : 0}
+                      %
                     </div>
                   </div>
-                  <div className="text-lg font-bold text-green-600">${day.totalSales.toFixed(2)}</div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full"
+                    style={{
+                      width:
+                        analytics.totalRevenue > 0
+                          ? `${(analytics.revenueByCategory.drinks / analytics.totalRevenue) * 100}%`
+                          : "0%",
+                    }}
+                  ></div>
+                </div>
 
-        {/* Top Selling Items */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Selling Items</CardTitle>
-            <CardDescription>Most popular items across all time</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {topItems.length === 0 ? (
-              <div className="text-center py-8">
-                <ShoppingCart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No sales data yet</h3>
-                <p className="text-gray-600">Start taking orders to see analytics here.</p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UtensilsCrossed className="h-4 w-4" />
+                    <span>Food</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold">{formatCurrency(analytics.revenueByCategory.food)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {analytics.totalRevenue > 0
+                        ? ((analytics.revenueByCategory.food / analytics.totalRevenue) * 100).toFixed(1)
+                        : 0}
+                      %
+                    </div>
+                  </div>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-green-600 h-2 rounded-full"
+                    style={{
+                      width:
+                        analytics.totalRevenue > 0
+                          ? `${(analytics.revenueByCategory.food / analytics.totalRevenue) * 100}%`
+                          : "0%",
+                    }}
+                  ></div>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {topItems.map((itemStat, index) => (
-                  <div key={itemStat.item.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full text-sm font-bold">
+            </CardContent>
+          </Card>
+
+          {/* Top Selling Items */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Top Selling Items</CardTitle>
+                  <CardDescription>
+                    Most popular menu items by quantity
+                    {analytics.topSellingItems.length > 5 && (
+                      <span className="ml-2 text-xs">
+                        ({showAllItems ? analytics.topSellingItems.length : 5} of {analytics.topSellingItems.length})
+                      </span>
+                    )}
+                  </CardDescription>
+                </div>
+                {analytics.topSellingItems.length > 5 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAllItems(!showAllItems)}
+                    className="flex items-center gap-1"
+                  >
+                    {showAllItems ? (
+                      <>
+                        Show Less <ChevronUp className="h-4 w-4" />
+                      </>
+                    ) : (
+                      <>
+                        Show All <ChevronDown className="h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {displayedItems.map((item, index) => (
+                  <div key={item.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
                         {index + 1}
                       </div>
                       <div>
-                        <h3 className="font-medium">{itemStat.item.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge
-                            variant={itemStat.item.category === "drink" ? "default" : "secondary"}
-                            className="text-xs"
-                          >
-                            {itemStat.item.category}
-                          </Badge>
-                          <span className="text-sm text-gray-600">${itemStat.item.price.toFixed(2)} each</span>
+                        <div className="font-medium">{item.name}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          {item.category === "drink" ? (
+                            <Coffee className="h-3 w-3" />
+                          ) : (
+                            <UtensilsCrossed className="h-3 w-3" />
+                          )}
+                          {item.category}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-lg">{itemStat.quantitySold}</div>
-                      <div className="text-sm text-gray-600">sold</div>
-                      <div className="text-sm font-medium text-green-600">${itemStat.revenue.toFixed(2)} revenue</div>
+                      <div className="font-bold">{item.quantity}</div>
+                      <div className="text-xs text-muted-foreground">{formatCurrency(item.revenue)}</div>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
+              {analytics.topSellingItems.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No items sold yet</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

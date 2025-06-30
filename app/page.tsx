@@ -1,79 +1,70 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Coffee, UtensilsCrossed, TrendingUp, Receipt, Archive, Plus } from "lucide-react"
+import { Coffee, UtensilsCrossed, Receipt, BarChart3, Archive, Plus, ShoppingCart, TrendingUp } from "lucide-react"
 import Link from "next/link"
-
-interface MenuItem {
-  id: string
-  name: string
-  price: number
-  category: "drink" | "food"
-  addOns: string[]
-  customField: string
-}
+import { useEffect, useState } from "react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface Order {
   id: string
-  items: OrderItem[]
+  items: any[]
   total: number
   timestamp: string
   date: string
 }
 
-interface OrderItem {
-  menuItem: MenuItem
-  quantity: number
-  addOns: string[]
-  customText: string
-  subtotal: number
+interface SaleSession {
+  id: string
+  name?: string
+  date: string
+  closedAt: string
+  orders: Order[]
+  totalSales: number
+  totalItems: number
+  orderCount: number
 }
 
 export default function HomePage() {
-  const [todayOrders, setTodayOrders] = useState<Order[]>([])
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
-  const [todayStats, setTodayStats] = useState({ totalSales: 0, itemsSold: 0 })
+  const [todaysOrders, setTodaysOrders] = useState<Order[]>([])
+  const [menuItemsCount, setMenuItemsCount] = useState(0)
+  const [archivedSessions, setArchivedSessions] = useState<SaleSession[]>([])
 
   useEffect(() => {
-    // Load data from localStorage
-    const savedOrders = localStorage.getItem("cafe-orders")
-    const savedMenu = localStorage.getItem("cafe-menu")
+    // Load today's orders
+    const orders = JSON.parse(localStorage.getItem("cafe-orders") || "[]")
+    const today = new Date().toDateString()
+    const todayOrders = orders.filter((order: Order) => order.date === today)
+    setTodaysOrders(todayOrders)
 
-    if (savedOrders) {
-      const orders = JSON.parse(savedOrders)
-      const today = new Date().toDateString()
-      const todaysOrders = orders.filter((order: Order) => order.date === today)
-      setTodayOrders(todaysOrders)
+    // Load menu items count
+    const menuItems = JSON.parse(localStorage.getItem("cafe-menu") || "[]")
+    setMenuItemsCount(menuItems.length)
 
-      // Calculate stats
-      const totalSales = todaysOrders.reduce((sum: number, order: Order) => sum + order.total, 0)
-      const itemsSold = todaysOrders.reduce(
-        (sum: number, order: Order) =>
-          sum + order.items.reduce((itemSum: number, item: OrderItem) => itemSum + item.quantity, 0),
-        0,
-      )
-      setTodayStats({ totalSales, itemsSold })
-    }
-
-    if (savedMenu) {
-      setMenuItems(JSON.parse(savedMenu))
-    }
+    // Load archived sessions
+    const archive = JSON.parse(localStorage.getItem("cafe-archive") || "[]")
+    setArchivedSessions(archive)
   }, [])
 
+  const todaysRevenue = todaysOrders.reduce((sum, order) => sum + order.total, 0)
+  const totalArchivedRevenue = archivedSessions.reduce((sum, session) => sum + session.totalSales, 0)
+  const totalRevenue = todaysRevenue + totalArchivedRevenue
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-2">
-            <img src="/favicon.jpg" alt="DDAL.licious Logo" className="w-12 h-12 rounded-full" />
-            <h1 className="text-3xl font-bold text-gray-900">DDAL.licious</h1>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-foreground mb-2">DDAL.licious</h1>
+            <p className="text-muted-foreground">Cafe Ordering & Management System</p>
           </div>
-          <p className="text-gray-600">Manage your restaurant orders, menu, and analytics</p>
+          <ThemeToggle />
         </div>
 
-        {/* Quick Stats */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -81,7 +72,7 @@ export default function HomePage() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${todayStats.totalSales.toFixed(2)}</div>
+              <div className="text-2xl font-bold">${todaysRevenue.toFixed(2)}</div>
             </CardContent>
           </Card>
 
@@ -91,7 +82,12 @@ export default function HomePage() {
               <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todayStats.itemsSold}</div>
+              <div className="text-2xl font-bold">
+                {todaysOrders.reduce(
+                  (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+                  0,
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -101,7 +97,7 @@ export default function HomePage() {
               <Coffee className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{menuItems.length}</div>
+              <div className="text-2xl font-bold">{menuItemsCount}</div>
             </CardContent>
           </Card>
 
@@ -111,7 +107,7 @@ export default function HomePage() {
               <Receipt className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todayOrders.length}</div>
+              <div className="text-2xl font-bold">{todaysOrders.length}</div>
             </CardContent>
           </Card>
         </div>
@@ -122,11 +118,17 @@ export default function HomePage() {
             <Link href="/order">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Plus className="h-5 w-5" />
+                  <ShoppingCart className="h-5 w-5" />
                   New Order
                 </CardTitle>
-                <CardDescription>Create a new order for customers</CardDescription>
+                <CardDescription>Start taking a new customer order</CardDescription>
               </CardHeader>
+              <CardContent>
+                <Button className="w-full">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Order
+                </Button>
+              </CardContent>
             </Link>
           </Card>
 
@@ -135,10 +137,22 @@ export default function HomePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Coffee className="h-5 w-5" />
-                  Manage Menu
+                  Menu Management
                 </CardTitle>
-                <CardDescription>Add, edit, or remove menu items</CardDescription>
+                <CardDescription>Add, edit, and organize menu items</CardDescription>
               </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  <Badge variant="secondary" className="text-xs">
+                    <Coffee className="h-3 w-3 mr-1" />
+                    Drinks
+                  </Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    <UtensilsCrossed className="h-3 w-3 mr-1" />
+                    Food
+                  </Badge>
+                </div>
+              </CardContent>
             </Link>
           </Card>
 
@@ -146,11 +160,14 @@ export default function HomePage() {
             <Link href="/analytics">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
+                  <BarChart3 className="h-5 w-5" />
                   Analytics
                 </CardTitle>
                 <CardDescription>View sales analytics and reports</CardDescription>
               </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">Track performance and trends</p>
+              </CardContent>
             </Link>
           </Card>
 
@@ -163,6 +180,9 @@ export default function HomePage() {
                 </CardTitle>
                 <CardDescription>View today's receipt history</CardDescription>
               </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{todaysOrders.length} orders today</p>
+              </CardContent>
             </Link>
           </Card>
 
@@ -175,36 +195,46 @@ export default function HomePage() {
                 </CardTitle>
                 <CardDescription>View archived receipts from previous days</CardDescription>
               </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{archivedSessions.length} archived sessions</p>
+              </CardContent>
             </Link>
           </Card>
         </div>
 
         {/* Recent Orders */}
-        {todayOrders.length > 0 && (
+        {todaysOrders.length > 0 && (
           <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Recent Orders</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-4">Recent Orders</h2>
             <div className="grid gap-4">
-              {todayOrders
+              {todaysOrders
                 .slice(-3)
                 .reverse()
                 .map((order) => (
                   <Card key={order.id}>
-                    <CardContent className="pt-6">
+                    <CardHeader>
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-medium">Order #{order.id.slice(-6)}</p>
-                          <p className="text-sm text-gray-600">{order.timestamp}</p>
-                          <div className="flex gap-2 mt-2">
-                            {order.items.map((item, index) => (
-                              <Badge key={index} variant="secondary">
-                                {item.quantity}x {item.menuItem.name}
-                              </Badge>
-                            ))}
-                          </div>
+                          <CardTitle className="text-lg">Order #{order.id.slice(-6)}</CardTitle>
+                          <CardDescription>{order.timestamp}</CardDescription>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-lg">${order.total.toFixed(2)}</p>
-                        </div>
+                        <Badge variant="outline" className="text-green-600">
+                          ${order.total.toFixed(2)}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-1">
+                        {order.items.slice(0, 3).map((item, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {item.quantity}x {item.menuItem.name}
+                          </Badge>
+                        ))}
+                        {order.items.length > 3 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{order.items.length - 3} more
+                          </Badge>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

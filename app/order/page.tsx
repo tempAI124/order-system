@@ -31,10 +31,16 @@ import {
 import { ArrowLeft, Plus, Minus, ShoppingCart, Receipt, Coffee, UtensilsCrossed, GripVertical, X } from "lucide-react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface AddOn {
   name: string
   price: number
+  allowQuantity?: boolean
+}
+
+interface SelectedAddOn extends AddOn {
+  quantity: number
 }
 
 interface MenuItem {
@@ -48,7 +54,7 @@ interface MenuItem {
 interface OrderItem {
   menuItem: MenuItem
   quantity: number
-  addOns: AddOn[]
+  addOns: SelectedAddOn[]
   subtotal: number
 }
 
@@ -82,8 +88,12 @@ export default function OrderPage() {
         ...item,
         addOns:
           Array.isArray(item.addOns) && item.addOns.length > 0 && typeof item.addOns[0] === "string"
-            ? item.addOns.map((addon: string) => ({ name: addon, price: 0 }))
-            : item.addOns || [],
+            ? item.addOns.map((addon: string) => ({ name: addon, price: 0, allowQuantity: false }))
+            : item.addOns?.map((addon: any) => ({
+                name: addon.name || addon,
+                price: addon.price || 0,
+                allowQuantity: addon.allowQuantity || false,
+              })) || [],
       }))
       setMenuItems(migratedItems)
 
@@ -152,12 +162,15 @@ export default function OrderPage() {
     setDragOverIndex(null)
   }
 
-  const addToCart = (menuItem: MenuItem, addOns: AddOn[] = []) => {
+  const addToCart = (menuItem: MenuItem, addOns: SelectedAddOn[] = []) => {
     const existingItemIndex = cart.findIndex(
-      (item) => item.menuItem.id === menuItem.id && JSON.stringify(item.addOns) === JSON.stringify(addOns),
+      (item) =>
+        item.menuItem.id === menuItem.id &&
+        JSON.stringify(item.addOns.map((a) => ({ name: a.name, quantity: a.quantity }))) ===
+          JSON.stringify(addOns.map((a) => ({ name: a.name, quantity: a.quantity }))),
     )
 
-    const addOnTotal = addOns.reduce((sum, addon) => sum + addon.price, 0)
+    const addOnTotal = addOns.reduce((sum, addon) => sum + addon.price * addon.quantity, 0)
     const subtotal = menuItem.price + addOnTotal
 
     if (existingItemIndex >= 0) {
@@ -184,7 +197,7 @@ export default function OrderPage() {
       updatedCart.splice(index, 1)
     } else {
       item.quantity += change
-      const addOnTotal = item.addOns.reduce((sum, addon) => sum + addon.price, 0)
+      const addOnTotal = item.addOns.reduce((sum, addon) => sum + addon.price * addon.quantity, 0)
       const itemPrice = item.menuItem.price + addOnTotal
       item.subtotal = itemPrice * item.quantity
     }
@@ -247,18 +260,21 @@ export default function OrderPage() {
     selectedCategory === "all" ? displayOrder : displayOrder.filter((item) => item.category === selectedCategory)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">New Order</h1>
-            <p className="text-gray-600">Select items to add to the order</p>
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="outline" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">New Order</h1>
+              <p className="text-muted-foreground">Select items to add to the order</p>
+            </div>
           </div>
+          <ThemeToggle />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -287,7 +303,7 @@ export default function OrderPage() {
                   Food
                 </Button>
               </div>
-              <p className="text-sm text-gray-500">Drag to reorder menu items</p>
+              <p className="text-sm text-muted-foreground">Drag to reorder menu items</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -307,7 +323,7 @@ export default function OrderPage() {
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
-                        <GripVertical className="h-4 w-4 text-gray-400" />
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <CardTitle className="text-lg">{item.name}</CardTitle>
                           <CardDescription className="text-xl font-bold text-green-600">
@@ -334,9 +350,9 @@ export default function OrderPage() {
 
             {filteredItems.length === 0 && (
               <div className="text-center py-12">
-                <ShoppingCart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No items found</h3>
-                <p className="text-gray-600">Add items to your menu first.</p>
+                <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">No items found</h3>
+                <p className="text-muted-foreground">Add items to your menu first.</p>
                 <Link href="/menu">
                   <Button className="mt-4">Go to Menu Management</Button>
                 </Link>
@@ -358,7 +374,7 @@ export default function OrderPage() {
               </CardHeader>
               <CardContent>
                 {cart.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">Cart is empty</p>
+                  <p className="text-muted-foreground text-center py-4">Cart is empty</p>
                 ) : (
                   <>
                     <div className="space-y-4 mb-4">
@@ -391,12 +407,14 @@ export default function OrderPage() {
                                 </AlertDialogContent>
                               </AlertDialog>
                             </div>
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-muted-foreground">
                               ${item.menuItem.price.toFixed(2)} base
                               {item.addOns.length > 0 && (
                                 <span>
                                   {" "}
-                                  + ${item.addOns.reduce((sum, addon) => sum + addon.price, 0).toFixed(2)} add-ons
+                                  + $
+                                  {item.addOns.reduce((sum, addon) => sum + addon.price * addon.quantity, 0).toFixed(2)}{" "}
+                                  add-ons
                                 </span>
                               )}
                             </p>
@@ -404,7 +422,8 @@ export default function OrderPage() {
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {item.addOns.map((addon, i) => (
                                   <Badge key={i} variant="outline" className="text-xs">
-                                    {addon.name} +${addon.price.toFixed(2)}
+                                    {addon.quantity > 1 ? `${addon.quantity}x ` : ""}
+                                    {addon.name} +${(addon.price * addon.quantity).toFixed(2)}
                                   </Badge>
                                 ))}
                               </div>
@@ -460,8 +479,8 @@ export default function OrderPage() {
             </DialogHeader>
 
             <div className="py-4 space-y-4">
-              <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">Total Amount</p>
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
                 <p className="text-3xl font-bold text-green-600">${calculateTotal().toFixed(2)}</p>
               </div>
 
@@ -479,17 +498,17 @@ export default function OrderPage() {
               </div>
 
               {paymentAmount && Number.parseFloat(paymentAmount) >= calculateTotal() && (
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Change</p>
-                  <p className="text-2xl font-bold text-blue-600">
+                <div className="text-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-1">Change</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                     ${(Number.parseFloat(paymentAmount) - calculateTotal()).toFixed(2)}
                   </p>
                 </div>
               )}
 
               {paymentAmount && Number.parseFloat(paymentAmount) < calculateTotal() && (
-                <div className="text-center p-4 bg-red-50 rounded-lg">
-                  <p className="text-sm text-red-600">
+                <div className="text-center p-4 bg-red-50 dark:bg-red-950 rounded-lg">
+                  <p className="text-sm text-red-600 dark:text-red-400">
                     Insufficient payment. Need ${(calculateTotal() - Number.parseFloat(paymentAmount)).toFixed(2)} more.
                   </p>
                 </div>
@@ -521,8 +540,8 @@ export default function OrderPage() {
             {currentOrder && (
               <div className="py-4">
                 <div className="text-center mb-4">
-                  <h3 className="font-bold text-lg">Cafe Receipt</h3>
-                  <p className="text-sm text-gray-600">{currentOrder.timestamp}</p>
+                  <h3 className="font-bold text-lg">DDAL.licious Receipt</h3>
+                  <p className="text-sm text-muted-foreground">{currentOrder.timestamp}</p>
                 </div>
 
                 <Separator className="my-4" />
@@ -535,8 +554,15 @@ export default function OrderPage() {
                           {item.quantity}x {item.menuItem.name}
                         </p>
                         {item.addOns.length > 0 && (
-                          <p className="text-xs text-gray-600">
-                            + {item.addOns.map((addon) => `${addon.name} (+$${addon.price.toFixed(2)})`).join(", ")}
+                          <p className="text-xs text-muted-foreground">
+                            +{" "}
+                            {item.addOns
+                              .map((addon) =>
+                                addon.quantity > 1
+                                  ? `${addon.quantity}x ${addon.name} (+$${(addon.price * addon.quantity).toFixed(2)})`
+                                  : `${addon.name} (+$${addon.price.toFixed(2)})`,
+                              )
+                              .join(", ")}
                           </p>
                         )}
                       </div>
@@ -582,8 +608,8 @@ export default function OrderPage() {
 function MenuItemActions({
   item,
   onAddToCart,
-}: { item: MenuItem; onAddToCart: (item: MenuItem, addOns: AddOn[]) => void }) {
-  const [selectedAddOns, setSelectedAddOns] = useState<AddOn[]>([])
+}: { item: MenuItem; onAddToCart: (item: MenuItem, addOns: SelectedAddOn[]) => void }) {
+  const [selectedAddOns, setSelectedAddOns] = useState<SelectedAddOn[]>([])
   const [showCustomization, setShowCustomization] = useState(false)
 
   const handleAddToCart = () => {
@@ -595,8 +621,24 @@ function MenuItemActions({
   const hasAddOns = item.addOns.length > 0
 
   const calculateItemTotal = () => {
-    const addOnTotal = selectedAddOns.reduce((sum, addon) => sum + addon.price, 0)
+    const addOnTotal = selectedAddOns.reduce((sum, addon) => sum + addon.price * addon.quantity, 0)
     return item.price + addOnTotal
+  }
+
+  const handleAddOnChange = (addon: AddOn, checked: boolean) => {
+    if (checked) {
+      setSelectedAddOns([...selectedAddOns, { ...addon, quantity: 1 }])
+    } else {
+      setSelectedAddOns(selectedAddOns.filter((a) => a.name !== addon.name))
+    }
+  }
+
+  const updateAddOnQuantity = (addonName: string, quantity: number) => {
+    if (quantity <= 0) {
+      setSelectedAddOns(selectedAddOns.filter((a) => a.name !== addonName))
+    } else {
+      setSelectedAddOns(selectedAddOns.map((addon) => (addon.name === addonName ? { ...addon, quantity } : addon)))
+    }
   }
 
   return (
@@ -618,32 +660,94 @@ function MenuItemActions({
           {item.addOns.length > 0 && (
             <div>
               <Label className="text-sm font-medium">Add-ons:</Label>
-              <div className="grid grid-cols-1 gap-2 mt-2">
-                {item.addOns.map((addon, index) => (
-                  <div key={index} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`${item.id}-addon-${index}`}
-                      checked={selectedAddOns.some((selected) => selected.name === addon.name)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedAddOns([...selectedAddOns, addon])
-                        } else {
-                          setSelectedAddOns(selectedAddOns.filter((a) => a.name !== addon.name))
-                        }
-                      }}
-                    />
-                    <Label htmlFor={`${item.id}-addon-${index}`} className="text-sm flex-1">
-                      {addon.name} <span className="text-green-600 font-medium">+${addon.price.toFixed(2)}</span>
-                    </Label>
-                  </div>
-                ))}
+              <div className="grid grid-cols-1 gap-3 mt-2">
+                {item.addOns.map((addon, index) => {
+                  const selectedAddon = selectedAddOns.find((a) => a.name === addon.name)
+                  const isSelected = !!selectedAddon
+
+                  return (
+                    <div key={index} className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`${item.id}-addon-${index}`}
+                          checked={isSelected}
+                          onCheckedChange={(checked) => handleAddOnChange(addon, checked as boolean)}
+                        />
+                        <Label htmlFor={`${item.id}-addon-${index}`} className="text-sm flex-1">
+                          {addon.name}{" "}
+                          <span className="text-green-600 font-medium">
+                            +${addon.price.toFixed(2)}
+                            {addon.allowQuantity && " each"}
+                          </span>
+                        </Label>
+                        {addon.allowQuantity && (
+                          <Badge variant="outline" className="text-xs">
+                            Qty
+                          </Badge>
+                        )}
+                      </div>
+
+                      {isSelected && addon.allowQuantity && (
+                        <div className="ml-6 flex items-center gap-2">
+                          <Label className="text-xs text-muted-foreground">Quantity:</Label>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-6 w-6 bg-transparent"
+                              onClick={() =>
+                                updateAddOnQuantity(addon.name, Math.max(1, (selectedAddon?.quantity || 1) - 1))
+                              }
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={selectedAddon?.quantity || 1}
+                              onChange={(e) => updateAddOnQuantity(addon.name, Number.parseInt(e.target.value) || 1)}
+                              className="w-16 h-6 text-center text-xs"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-6 w-6 bg-transparent"
+                              onClick={() =>
+                                updateAddOnQuantity(addon.name, Math.min(10, (selectedAddon?.quantity || 1) + 1))
+                              }
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            = ${((selectedAddon?.quantity || 1) * addon.price).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
 
           {selectedAddOns.length > 0 && (
-            <div className="p-2 bg-blue-50 rounded">
-              <p className="text-sm font-medium">Total: ${calculateItemTotal().toFixed(2)}</p>
+            <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                Total: ${calculateItemTotal().toFixed(2)}
+              </p>
+              <div className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                {selectedAddOns.map((addon, i) => (
+                  <span key={i}>
+                    {addon.quantity > 1 ? `${addon.quantity}x ` : ""}
+                    {addon.name}
+                    {i < selectedAddOns.length - 1 ? ", " : ""}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 

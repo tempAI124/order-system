@@ -348,7 +348,7 @@ export default function OrderPage() {
               </p>
             </div>
 
-            <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
               {filteredItems.map((item, index) => (
                 <Card
                   key={item.id}
@@ -371,9 +371,7 @@ export default function OrderPage() {
                       <div className='flex items-center gap-2'>
                         <GripVertical className='h-4 w-4 text-muted-foreground' />
                         <div>
-                          <CardTitle className='line-clamp-2 text-base md:text-lg font-semibold min-h-[2.5rem]'>
-                            {item.name}
-                          </CardTitle>
+                          <CardTitle className='text-lg'>{item.name}</CardTitle>
                           <CardDescription className='text-xl font-bold text-green-600'>
                             ${item.price.toFixed(2)}
                           </CardDescription>
@@ -573,6 +571,15 @@ export default function OrderPage() {
                             className='flex-1 text-xs'
                           >
                             $10
+                          </Button>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            size='sm'
+                            onClick={() => setPaymentAmount('20.00')}
+                            className='flex-1 text-xs'
+                          >
+                            $20
                           </Button>
                         </div>
                         <Input

@@ -83,6 +83,9 @@ export default function ArchivePage() {
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [importData, setImportData] = useState("")
   const [importPreview, setImportPreview] = useState<SaleSession[]>([])
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false)
+  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set())
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
 
   useEffect(() => {
     loadSalesSessions()
@@ -461,6 +464,32 @@ export default function ArchivePage() {
     return category === "drink" ? "🥤" : "🍪"
   }
 
+  const handleBulkDelete = () => {
+    const updatedSessions = salesSessions.filter((session) => !selectedSessions.has(session.id))
+    localStorage.setItem("cafe-archive", JSON.stringify(updatedSessions))
+    setSalesSessions(updatedSessions)
+
+    // Clear selections and close dialogs
+    setSelectedSessions(new Set())
+    setShowBulkDeleteDialog(false)
+    setShowAdvancedOptions(false)
+
+    // Close any expanded sessions that were deleted
+    const newExpanded = new Set(expandedSessions)
+    selectedSessions.forEach((sessionId) => newExpanded.delete(sessionId))
+    setExpandedSessions(newExpanded)
+  }
+
+  const toggleSessionSelection = (sessionId: string) => {
+    const newSelected = new Set(selectedSessions)
+    if (newSelected.has(sessionId)) {
+      newSelected.delete(sessionId)
+    } else {
+      newSelected.add(sessionId)
+    }
+    setSelectedSessions(newSelected)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6">
@@ -493,6 +522,11 @@ export default function ArchivePage() {
             <Badge variant="secondary" className="text-sm">
               Total: ${salesSessions.reduce((sum, session) => sum + session.totalSales, 0).toFixed(2)}
             </Badge>
+            {selectedSessions.size > 0 && (
+              <Badge variant="destructive" className="text-sm">
+                {selectedSessions.size} Selected
+              </Badge>
+            )}
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto">
@@ -504,6 +538,57 @@ export default function ArchivePage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8 w-full sm:w-[200px]"
               />
+            </div>
+
+            {/* Advanced Options - Hidden by default */}
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                ⚙️
+              </Button>
+
+              {showAdvancedOptions && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-background border rounded-lg shadow-lg p-3 z-50">
+                  <div className="text-xs font-medium text-muted-foreground mb-3 border-b pb-2">Advanced Options</div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Select All Sessions</Label>
+                      <input
+                        type="checkbox"
+                        checked={selectedSessions.size === salesSessions.length && salesSessions.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSessions(new Set(salesSessions.map((s) => s.id)))
+                          } else {
+                            setSelectedSessions(new Set())
+                          }
+                        }}
+                        className="w-3 h-3"
+                      />
+                    </div>
+
+                    {selectedSessions.size > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setShowBulkDeleteDialog(true)}
+                        className="w-full text-xs"
+                      >
+                        Delete Selected ({selectedSessions.size})
+                      </Button>
+                    )}
+
+                    <div className="text-xs text-muted-foreground pt-2 border-t">
+                      ⚠️ Use with caution - deletions are permanent
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
@@ -667,11 +752,22 @@ export default function ArchivePage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      {expandedSessions.has(session.id) ? (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                      )}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedSessions.has(session.id)}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            toggleSessionSelection(session.id)
+                          }}
+                          className="w-4 h-4"
+                        />
+                        {expandedSessions.has(session.id) ? (
+                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
                       <div>
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
@@ -881,6 +977,80 @@ export default function ArchivePage() {
             ))}
           </div>
         )}
+
+        {/* Bulk Delete Confirmation Dialog */}
+        <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>⚠️ Bulk Delete Archive Sessions</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-3">
+                  <div className="text-red-600 dark:text-red-400 font-medium">
+                    This is a PERMANENT action that cannot be undone!
+                  </div>
+
+                  <div>
+                    You are about to delete <strong>{selectedSessions.size}</strong> archive session(s) with:
+                  </div>
+
+                  <div className="bg-red-50 dark:bg-red-950 p-3 rounded border border-red-200 dark:border-red-800">
+                    <div className="text-sm space-y-1">
+                      <div>
+                        •{" "}
+                        <strong>
+                          {salesSessions
+                            .filter((s) => selectedSessions.has(s.id))
+                            .reduce((sum, s) => sum + s.orderCount, 0)}
+                        </strong>{" "}
+                        total orders
+                      </div>
+                      <div>
+                        •{" "}
+                        <strong>
+                          {salesSessions
+                            .filter((s) => selectedSessions.has(s.id))
+                            .reduce((sum, s) => sum + s.totalItems, 0)}
+                        </strong>{" "}
+                        total items
+                      </div>
+                      <div>
+                        •{" "}
+                        <strong>
+                          $
+                          {salesSessions
+                            .filter((s) => selectedSessions.has(s.id))
+                            .reduce((sum, s) => sum + s.totalSales, 0)
+                            .toFixed(2)}
+                        </strong>{" "}
+                        in total sales
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    Selected sessions:{" "}
+                    {salesSessions
+                      .filter((s) => selectedSessions.has(s.id))
+                      .map((s) => s.name || `Session - ${new Date(s.date).toLocaleDateString()}`)
+                      .join(", ")}
+                  </div>
+
+                  <div className="bg-yellow-50 dark:bg-yellow-950 p-3 rounded border border-yellow-200 dark:border-yellow-800">
+                    <div className="text-yellow-800 dark:text-yellow-200 text-sm font-medium">
+                      💡 Consider exporting your data before deletion if you might need it later.
+                    </div>
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel - Keep Sessions</AlertDialogCancel>
+              <AlertDialogAction onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-700 text-white">
+                🗑️ Permanently Delete {selectedSessions.size} Session(s)
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

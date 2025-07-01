@@ -358,18 +358,56 @@ export default function OrderPage() {
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, item)}
                   onDragEnd={handleDragEnd}
-                  className={`cursor-move transition-all ${
+                  className={`cursor-move transition-all touch-pan-y select-none ${
                     draggedItem?.id === item.id ? 'opacity-50 scale-95' : ''
                   } ${
                     dragOverIndex === index
                       ? 'ring-2 ring-blue-400 ring-offset-2'
                       : ''
                   }`}
+                  // Add role and aria-grabbed for accessibility
+                  role='option'
+                  aria-grabbed={draggedItem?.id === item.id}
+                  tabIndex={0}
+                  // Keyboard reordering for accessibility
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp' && index > 0) {
+                      // Move item up
+                      const reordered = [...filteredItems];
+                      [reordered[index - 1], reordered[index]] = [
+                        reordered[index],
+                        reordered[index - 1],
+                      ];
+                      saveDisplayOrder(reordered);
+                    }
+                    if (
+                      e.key === 'ArrowDown' &&
+                      index < filteredItems.length - 1
+                    ) {
+                      // Move item down
+                      const reordered = [...filteredItems];
+                      [reordered[index], reordered[index + 1]] = [
+                        reordered[index + 1],
+                        reordered[index],
+                      ];
+                      saveDisplayOrder(reordered);
+                    }
+                  }}
                 >
                   <CardHeader>
                     <div className='flex justify-between items-start'>
                       <div className='flex items-center gap-2'>
-                        <GripVertical className='h-4 w-4 text-muted-foreground' />
+                        {/* Show a larger drag handle on mobile/tablet */}
+                        <span
+                          className='flex items-center justify-center md:hidden touch-none active:scale-125 transition-transform'
+                          style={{ touchAction: 'none', cursor: 'grab' }}
+                          aria-label='Drag to reorder'
+                        >
+                          <GripVertical className='h-6 w-6 text-muted-foreground' />
+                        </span>
+                        <span className='hidden md:flex'>
+                          <GripVertical className='h-4 w-4 text-muted-foreground' />
+                        </span>
                         <div>
                           <CardTitle className='text-lg'>{item.name}</CardTitle>
                           <CardDescription className='text-xl font-bold text-green-600'>
@@ -433,7 +471,10 @@ export default function OrderPage() {
                   </p>
                 ) : (
                   <>
-                    <div className='space-y-4 mb-4'>
+                    <div
+                      className='space-y-4 mb-4 overflow-y-auto'
+                      style={{ maxHeight: 'calc(100vh - 340px)' }}
+                    >
                       {cart.map((item, index) => (
                         <div
                           key={index}
@@ -644,34 +685,46 @@ export default function OrderPage() {
 
         {/* Receipt Dialog */}
         <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-          <DialogContent className='sm:max-w-[425px]'>
+          <DialogContent className='sm:max-w-[425px] p-4'>
             <DialogHeader>
-              <DialogTitle>Order Complete!</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className='text-base md:text-lg'>
+                Order Complete!
+              </DialogTitle>
+              <DialogDescription className='text-xs md:text-sm'>
                 Receipt for Order #{currentOrder?.id.slice(-6)}
               </DialogDescription>
             </DialogHeader>
 
             {currentOrder && (
-              <div className='py-4'>
-                <div className='text-center mb-4'>
-                  <h3 className='font-bold text-lg'>DDAL.licious Receipt</h3>
-                  <p className='text-sm text-muted-foreground'>
+              <div className='py-2'>
+                <div className='text-center mb-2'>
+                  <h3 className='font-bold text-base'>DDAL.licious Receipt</h3>
+                  <p className='text-xs text-muted-foreground'>
                     {currentOrder.timestamp}
                   </p>
                 </div>
 
-                <Separator className='my-4' />
+                <Separator className='my-2' />
 
-                <div className='space-y-2'>
+                {/* Make only the item list scrollable */}
+                <div
+                  className='space-y-2 overflow-y-auto'
+                  style={{
+                    maxHeight: '30vh',
+                    minHeight: 'unset',
+                  }}
+                >
                   {currentOrder.items.map((item, index) => (
-                    <div key={index} className='flex justify-between'>
+                    <div
+                      key={index}
+                      className='flex justify-between items-start'
+                    >
                       <div>
-                        <p className='font-medium'>
+                        <p className='font-medium text-xs md:text-sm'>
                           {item.quantity}x {item.menuItem.name}
                         </p>
                         {item.addOns.length > 0 && (
-                          <p className='text-xs text-muted-foreground'>
+                          <p className='text-[10px] text-muted-foreground'>
                             +{' '}
                             {item.addOns
                               .map((addon) =>
@@ -687,29 +740,31 @@ export default function OrderPage() {
                           </p>
                         )}
                       </div>
-                      <span>${item.subtotal.toFixed(2)}</span>
+                      <span className='text-xs md:text-sm'>
+                        ${item.subtotal.toFixed(2)}
+                      </span>
                     </div>
                   ))}
                 </div>
 
-                <div className='border-t pt-4 space-y-2'>
-                  <div className='flex justify-between'>
+                <div className='border-t pt-2 space-y-1 mt-2'>
+                  <div className='flex justify-between text-xs md:text-sm'>
                     <span>Subtotal:</span>
                     <span>${currentOrder.total.toFixed(2)}</span>
                   </div>
-                  <div className='flex justify-between'>
+                  <div className='flex justify-between text-xs md:text-sm'>
                     <span>Amount Paid:</span>
                     <span>${(currentOrder.total + change).toFixed(2)}</span>
                   </div>
-                  <div className='flex justify-between font-bold text-lg border-t pt-2'>
+                  <div className='flex justify-between font-bold text-xs md:text-base border-t pt-1'>
                     <span>Change:</span>
                     <span className='text-green-600'>${change.toFixed(2)}</span>
                   </div>
                 </div>
 
-                <Separator className='my-4' />
+                <Separator className='my-2' />
 
-                <div className='flex justify-between font-bold text-lg'>
+                <div className='flex justify-between font-bold text-base md:text-lg'>
                   <span>Total:</span>
                   <span>${currentOrder.total.toFixed(2)}</span>
                 </div>
@@ -717,7 +772,12 @@ export default function OrderPage() {
             )}
 
             <DialogFooter>
-              <Button onClick={() => setShowReceipt(false)}>Close</Button>
+              <Button
+                onClick={() => setShowReceipt(false)}
+                className='w-full text-xs md:text-sm'
+              >
+                Close
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

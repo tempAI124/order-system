@@ -95,6 +95,24 @@ interface SaleSession {
   orderCount: number;
 }
 
+// New interfaces for imported data structure
+interface ImportedOrderDetails {
+  [itemName: string]: {
+    price?: number;
+    quantity?: number;
+  };
+}
+
+interface ImportedOrder {
+  id?: string | number;
+  details: ImportedOrderDetails;
+  timestamp?: string;
+}
+
+interface ImportedData {
+  [dateString: string]: ImportedOrder[];
+}
+
 export default function ArchivePage() {
   const [salesSessions, setSalesSessions] = useState<SaleSession[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -298,19 +316,19 @@ export default function ArchivePage() {
 
   const handleImportData = () => {
     try {
-      const parsedData = JSON.parse(importData);
+      const parsedData: ImportedData = JSON.parse(importData);
       const convertedSessions: SaleSession[] = [];
 
       Object.entries(parsedData).forEach(
-        ([dateKey, orders]: [string, any[]]) => {
+        ([dateKey, orders]: [string, ImportedOrder[]]) => {
           const sessionDate = new Date(dateKey).toDateString();
 
-          const convertedOrders: Order[] = orders.map((order: any) => {
+          const convertedOrders: Order[] = orders.map((order: ImportedOrder) => {
             const orderItems: OrderItem[] = [];
             let orderTotal = 0;
 
             Object.entries(order.details).forEach(
-              ([itemName, itemData]: [string, any]) => {
+              ([itemName, itemData]: [string, { price?: number; quantity?: number }]) => {
                 const cleanItemName = itemName.trim();
                 const itemCategory = categorizeItem(cleanItemName);
 

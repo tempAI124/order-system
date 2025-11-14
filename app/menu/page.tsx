@@ -50,6 +50,8 @@ import {
   UtensilsCrossed,
   ArrowLeft,
   X,
+  Download, // Added Download icon
+  Upload,   // Added Upload icon
 } from 'lucide-react';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -83,6 +85,9 @@ export default function MenuPage() {
     price: '',
     allowQuantity: false,
   });
+
+  // New states for import/export
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   useEffect(() => {
     const savedMenu = localStorage.getItem('cafe-menu');
@@ -187,6 +192,50 @@ export default function MenuPage() {
     setFormData({ ...formData, addOns: updatedAddOns });
   };
 
+  // New function for exporting menu
+  const handleExportMenu = () => {
+    const menuData = localStorage.getItem('cafe-menu') || '[]';
+    const blob = new Blob([menuData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ddal-licious-menu-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('Menu exported successfully!');
+  };
+
+  // New function for importing menu
+  const handleImportFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsedMenu: MenuItem[] = JSON.parse(content);
+
+        // Basic validation for imported menu structure
+        if (!Array.isArray(parsedMenu) || !parsedMenu.every(item => item.id && item.name && typeof item.price === 'number' && item.category)) {
+          alert('Invalid JSON format. Please ensure the file contains an array of menu items with id, name, price, and category.');
+          return;
+        }
+
+        // Update local storage and state
+        saveToStorage(parsedMenu);
+        setShowImportDialog(false);
+        alert('Menu imported successfully!');
+      } catch (error) {
+        alert('Error parsing JSON file. Please ensure it is a valid JSON.');
+        console.error('Error importing menu:', error);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const drinks = menuItems.filter((item) => item.category === 'drink');
   const foods = menuItems.filter((item) => item.category === 'food');
 
@@ -224,200 +273,242 @@ export default function MenuPage() {
             </Badge>
           </div>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className='h-4 w-4 mr-2' />
-                Add Menu Item
-              </Button>
-            </DialogTrigger>
-            <DialogContent className='sm:max-w-[500px]'>
-              <DialogHeader>
-                <DialogTitle>
-                  {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
-                </DialogTitle>
-                <DialogDescription>
-                  {editingItem
-                    ? 'Update the menu item details below.'
-                    : 'Add a new item to your cafe menu.'}
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit}>
-                <div className='grid gap-4 py-4 max-h-[60vh] overflow-y-auto'>
-                  <div className='grid gap-2'>
-                    <Label htmlFor='name'>Item Name</Label>
-                    <Input
-                      id='name'
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
-                      placeholder='e.g., Cappuccino, Sandwich'
-                      required
-                    />
-                  </div>
+          <div className='flex gap-2'>
+            {/* New Export Button */}
+            <Button variant='outline' onClick={handleExportMenu}>
+              <Download className='h-4 w-4 mr-2' />
+              Export Menu
+            </Button>
 
-                  <div className='grid gap-2'>
-                    <Label htmlFor='price'>Price ($)</Label>
-                    <Input
-                      id='price'
-                      type='number'
-                      step='0.01'
-                      value={formData.price}
-                      onChange={(e) =>
-                        setFormData({ ...formData, price: e.target.value })
-                      }
-                      placeholder='0.00'
-                      required
-                    />
-                  </div>
-
-                  <div className='grid gap-2'>
-                    <Label htmlFor='category'>Category</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value: 'drink' | 'food') =>
-                        setFormData({ ...formData, category: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='drink'>Drink</SelectItem>
-                        <SelectItem value='food'>Food</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className='grid gap-2'>
-                    <Label>Add-ons</Label>
-                    <div className='space-y-2'>
-                      {formData.addOns.map((addon, index) => (
-                        <div
-                          key={index}
-                          className='flex items-center justify-between p-2 bg-muted rounded border'
-                        >
-                          <div className='flex-1'>
-                            <div className='flex items-center gap-2'>
-                              <span className='font-medium text-foreground'>
-                                {addon.name}
-                              </span>
-                              {addon.allowQuantity && (
-                                <Badge variant='outline' className='text-xs'>
-                                  Qty
-                                </Badge>
-                              )}
-                            </div>
-                            <span className='text-green-600 dark:text-green-400 font-medium text-sm'>
-                              +${addon.price.toFixed(2)}
-                              {addon.allowQuantity && ' each'}
-                            </span>
-                          </div>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant='outline'
-                                size='icon'
-                                className='h-6 w-6 bg-transparent'
-                              >
-                                <X className='h-3 w-3' />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Remove Add-on
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to remove "{addon.name}"
-                                  from the add-ons list?
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => removeAddOn(index)}
-                                >
-                                  Remove
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className='space-y-2 p-3 border rounded-lg bg-muted/50'>
-                      <div className='flex gap-2'>
-                        <Input
-                          placeholder='Add-on name (e.g., Extra Egg)'
-                          value={newAddOn.name}
-                          onChange={(e) =>
-                            setNewAddOn({ ...newAddOn, name: e.target.value })
-                          }
-                          className='flex-1'
-                        />
-                        <Input
-                          type='number'
-                          step='0.01'
-                          placeholder='Price'
-                          value={newAddOn.price}
-                          onChange={(e) =>
-                            setNewAddOn({ ...newAddOn, price: e.target.value })
-                          }
-                          className='w-24'
-                        />
-                      </div>
-                      <div className='flex items-center justify-between'>
-                        <div className='flex items-center space-x-2'>
-                          <Checkbox
-                            id='allow-quantity'
-                            checked={newAddOn.allowQuantity}
-                            onCheckedChange={(checked) =>
-                              setNewAddOn({
-                                ...newAddOn,
-                                allowQuantity: checked as boolean,
-                              })
-                            }
-                          />
-                          <Label htmlFor='allow-quantity' className='text-sm'>
-                            Allow quantity selection
-                          </Label>
-                        </div>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          onClick={addNewAddOn}
-                          disabled={!newAddOn.name.trim() || !newAddOn.price}
-                          size='sm'
-                        >
-                          <Plus className='h-4 w-4 mr-1' />
-                          Add
-                        </Button>
-                      </div>
-                      <p className='text-xs text-muted-foreground'>
-                        Check "Allow quantity selection" for add-ons like eggs,
-                        where customers can specify amounts
-                      </p>
-                    </div>
-                  </div>
+            {/* New Import Button */}
+            <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+              <DialogTrigger asChild>
+                <Button variant='outline'>
+                  <Upload className='h-4 w-4 mr-2' />
+                  Import Menu
+                </Button>
+              </DialogTrigger>
+              <DialogContent className='sm:max-w-[425px]'>
+                <DialogHeader>
+                  <DialogTitle>Import Menu Items</DialogTitle>
+                  <DialogDescription>
+                    Upload a JSON file to import menu items. This will replace your current menu.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className='grid gap-4 py-4'>
+                  <Input
+                    id='menu-import-file'
+                    type='file'
+                    accept='.json'
+                    onChange={handleImportFileChange}
+                  />
                 </div>
                 <DialogFooter>
                   <Button
-                    type='button'
                     variant='outline'
-                    onClick={() => setIsDialogOpen(false)}
+                    onClick={() => setShowImportDialog(false)}
                   >
                     Cancel
                   </Button>
-                  <Button type='submit'>
-                    {editingItem ? 'Update Item' : 'Add Item'}
-                  </Button>
                 </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={resetForm}>
+                  <Plus className='h-4 w-4 mr-2' />
+                  Add Menu Item
+                </Button>
+              </DialogTrigger>
+              <DialogContent className='sm:max-w-[500px]'>
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {editingItem
+                      ? 'Update the menu item details below.'
+                      : 'Add a new item to your cafe menu.'}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit}>
+                  <div className='grid gap-4 py-4 max-h-[60vh] overflow-y-auto'>
+                    <div className='grid gap-2'>
+                      <Label htmlFor='name'>Item Name</Label>
+                      <Input
+                        id='name'
+                        value={formData.name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, name: e.target.value })
+                        }
+                        placeholder='e.g., Cappuccino, Sandwich'
+                        required
+                      />
+                    </div>
+
+                    <div className='grid gap-2'>
+                      <Label htmlFor='price'>Price ($)</Label>
+                      <Input
+                        id='price'
+                        type='number'
+                        step='0.01'
+                        value={formData.price}
+                        onChange={(e) =>
+                          setFormData({ ...formData, price: e.target.value })
+                        }
+                        placeholder='0.00'
+                        required
+                      />
+                    </div>
+
+                    <div className='grid gap-2'>
+                      <Label htmlFor='category'>Category</Label>
+                      <Select
+                        value={formData.category}
+                        onValueChange={(value: 'drink' | 'food') =>
+                          setFormData({ ...formData, category: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='drink'>Drink</SelectItem>
+                          <SelectItem value='food'>Food</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className='grid gap-2'>
+                      <Label>Add-ons</Label>
+                      <div className='space-y-2'>
+                        {formData.addOns.map((addon, index) => (
+                          <div
+                            key={index}
+                            className='flex items-center justify-between p-2 bg-muted rounded border'
+                          >
+                            <div className='flex-1'>
+                              <div className='flex items-center gap-2'>
+                                <span className='font-medium text-foreground'>
+                                  {addon.name}
+                                </span>
+                                {addon.allowQuantity && (
+                                  <Badge variant='outline' className='text-xs'>
+                                    Qty
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className='text-green-600 dark:text-green-400 font-medium text-sm'>
+                                +${addon.price.toFixed(2)}
+                                {addon.allowQuantity && ' each'}
+                              </span>
+                            </div>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant='outline'
+                                  size='icon'
+                                  className='h-6 w-6 bg-transparent'
+                                >
+                                  <X className='h-3 w-3' />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Remove Add-on
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to remove "{addon.name}"
+                                    from the add-ons list?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => removeAddOn(index)}
+                                  >
+                                    Remove
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className='space-y-2 p-3 border rounded-lg bg-muted/50'>
+                        <div className='flex gap-2'>
+                          <Input
+                            placeholder='Add-on name (e.g., Extra Egg)'
+                            value={newAddOn.name}
+                            onChange={(e) =>
+                              setNewAddOn({ ...newAddOn, name: e.target.value })
+                            }
+                            className='flex-1'
+                          />
+                          <Input
+                            type='number'
+                            step='0.01'
+                            placeholder='Price'
+                            value={newAddOn.price}
+                            onChange={(e) =>
+                              setNewAddOn({ ...newAddOn, price: e.target.value })
+                            }
+                            className='w-24'
+                          />
+                        </div>
+                        <div className='flex items-center justify-between'>
+                          <div className='flex items-center space-x-2'>
+                            <Checkbox
+                              id='allow-quantity'
+                              checked={newAddOn.allowQuantity}
+                              onCheckedChange={(checked) =>
+                                setNewAddOn({
+                                  ...newAddOn,
+                                  allowQuantity: checked as boolean,
+                                })
+                              }
+                            />
+                            <Label htmlFor='allow-quantity' className='text-sm'>
+                              Allow quantity selection
+                            </Label>
+                          </div>
+                          <Button
+                            type='button'
+                            variant='outline'
+                            onClick={addNewAddOn}
+                            disabled={!newAddOn.name.trim() || !newAddOn.price}
+                            size='sm'
+                          >
+                            <Plus className='h-4 w-4 mr-1' />
+                            Add
+                          </Button>
+                        </div>
+                        <p className='text-xs text-muted-foreground'>
+                          Check "Allow quantity selection" for add-ons like eggs,
+                          where customers can specify amounts
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      onClick={() => setIsDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type='submit'>
+                      {editingItem ? 'Update Item' : 'Add Item'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <div className='mb-8'>

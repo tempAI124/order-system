@@ -409,8 +409,8 @@ export default function OrderPage() {
                           <GripVertical className='h-4 w-4 text-muted-foreground' />
                         </span>
                         <div>
-                          <CardTitle className='text-lg'>{item.name}</CardTitle>
-                          <CardDescription className='text-xl font-bold text-green-600'>
+                          <CardTitle className='text-sm'>{item.name}</CardTitle>
+                          <CardDescription className='text-base font-bold text-green-600'>
                             ${item.price.toFixed(2)}
                           </CardDescription>
                         </div>
@@ -471,10 +471,7 @@ export default function OrderPage() {
                   </p>
                 ) : (
                   <>
-                    <div
-                      className='space-y-4 mb-4 overflow-y-auto'
-                      style={{ maxHeight: 'calc(100vh - 340px)' }}
-                    >
+                    <div className='space-y-4 mb-4 overflow-y-auto max-h-[275px]'>
                       {cart.map((item, index) => (
                         <div
                           key={index}
